@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "apexVIP",
+    "slug": "apexvip",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "apexvip",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "se.apex.vip",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "apexVIP ansluter till din Polar H10 f\u00f6r puls och RR.",
+        "UIBackgroundModes": [
+          "bluetooth-central"
+        ],
+        "NSLocalNetworkUsageDescription": "Anslut till din lokala apexVIP-server f\u00f6r utveckling."
+      }
+    },
+    "android": {
+      "package": "se.apex.vip",
+      "permissions": [
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-secure-store",
+      "./plugins/with-polar-pods"
+    ]
+  }
+}

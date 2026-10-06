@@ -1,0 +1,30 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.apexpolar'
+version = '0.7.9'
+
+android {
+  namespace "expo.modules.apexpolar"
+  defaultConfig {
+    versionCode 1
+    versionName "0.7.9"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+  maven { url 'https://www.jitpack.io' }
+}
+
+dependencies {
+  implementation "com.github.polarofficial:polar-ble-sdk:6.16.0"
+  implementation "io.reactivex.rxjava3:rxjava:3.1.6"
+  implementation "io.reactivex.rxjava3:rxandroid:3.0.2"
+}

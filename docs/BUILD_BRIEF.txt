@@ -1,0 +1,267 @@
+**Ja—vi ger den en tydlig byggbrief och låter den arbeta stegvis mot en fungerande produkt.** Öppna projektmappen i Codex på din Mac, bifoga sammanställningen och klistra in detta. Gamla kodbaser får gärna ligga tillgängliga som referens.
+
+Du ska hjälpa mig att designa och bygga nästa generation av APEX. Ta ansvar för arkitektur, implementation, gränssnitt och verifiering. Arbeta självständigt med rimliga tekniska beslut och fortsätt från planering till fungerande kod.
+
+## 1. Produktens mål
+
+APEX ska bli en bred, professionell och anpassningsbar plattform för insamling och analys av fysiologiska mätningar, rörelse, självskattningar och händelser inom träning och forskning.
+
+Den tidigare versionen utvecklades för polisutbildning. Den nya plattformen ska kunna användas i flera sammanhang utan hårdkodade polisscenarier.
+
+Polar H10 är första sensorn och ska användas även fortsättningsvis.
+
+Första versionen prioriterar:
+- Pålitlig datainsamling i mobilappen.
+- Säker lokal lagring och robust synkronisering.
+- En snabb och visuellt genomarbetad webbapp.
+- En mycket anpassningsbar analysyta för tränare och forskare.
+- Jämförelser mellan sessioner och deltagare.
+
+Livevisning för tränare är en framtida funktion. Förbered datamodell och gränssnitt för den, men bygg inte en fullständig liveplattform i första versionen.
+
+## 2. Underlag och befintlig kod
+
+Den bifogade APEX-sammanställningen beskriver det tidigare systemet. Använd den som historiskt underlag och som information om tidigare begränsningar. Den är inte en bindande specifikation för den nya produkten.
+
+Tidigare repos:
+- https://github.com/elielalaw1/apex-web
+- https://github.com/elielalaw1/apex-mobile
+
+En eventuell mapp “Coach Dashboard Design 2” är en separat prototyp.
+
+Undersök tillgänglig kod innan du fattar beslut om återanvändning. Bevara fungerande sensorintegration där det är lämpligt, men låt inte tidigare implementation begränsa den nya arkitekturen.
+
+Anta inte att gamla commits motsvarar senare skärmbilder eller driftsatta versioner. Skilj på vad du har verifierat och vad underlaget påstår.
+
+Skydda befintligt arbete och data. Arbeta isolerat i en ny gren eller separat projektmapp, beroende på arbetsytans struktur. Skriv inte över lokala ändringar.
+
+## 3. Din arbetsmetod
+
+Börja med att inspektera arbetsytan och relevanta projektinstruktioner.
+
+Skapa sedan korta, beständiga projektdokument för:
+- Produktkrav och avgränsningar.
+- Arkitektur och viktiga beslut.
+- Implementationsplan med verifierbara milstolpar.
+- Aktuell status, kvarstående problem och nästa steg.
+
+Fortsätt därefter med implementation. Stanna inte efter en plan eller en statisk UI-prototyp.
+
+Välj rimliga standarder själv. Ställ frågor endast när svaret väsentligt påverkar produkten eller när nödvändig åtkomst saknas. Redovisa antaganden tydligt.
+
+Undvik att byta teknik enbart för att något är nyare. Bedöm befintlig Expo/React Native-, Next.js- och Supabase-baserad lösning, men välj utifrån produktkraven, underhållbarhet och verifierad kompatibilitet.
+
+## 4. Webbappens viktigaste funktion: analysytan
+
+Analysytan ska vara produktens kärna. Tränaren ska kunna skapa en egen arbetsyta utan att behöva programmera.
+
+Implementera stöd för att:
+- Lägga till och ta bort diagrampaneler.
+- Flytta paneler och ändra deras storlek.
+- Välja session, deltagare och signal per panel.
+- Visa flera kompatibla signaler som overlay i samma diagram.
+- Visa signaler i separata, synkroniserade diagram.
+- Anpassa färg, linjetjocklek, transparens och synlighet.
+- Spara, namnge, öppna, ändra och duplicera analysupplägg.
+
+Gör diagramkonfigurationen strukturerad och versionshanterad så att sparade upplägg kan utvecklas tillsammans med produkten.
+
+En bra standardvy ska fungera direkt. Avancerade inställningar ska gå att öppna när de behövs, utan att första användningen blir överväldigande.
+
+### Tidslinjer och interaktion
+
+- Använd numeriska tidsaxlar med korrekta avstånd vid ojämn sampling.
+- Stöd synkroniserad zoom och panorering.
+- Visa en gemensam tidsmarkör mellan länkade diagram.
+- Låt användaren markera ett intervall och se sammanfattningar för det.
+- Visa självskattningar, scenariomoment och anteckningar på tidslinjen.
+- Visa dataluckor som luckor.
+- Skilj mellan faktisk mätning, bearbetad signal och eventuell interpolation.
+
+### Overlay och jämförelser
+
+Olika signaler har olika enheter och samplingstakter. Gör det tydligt hur de visas tillsammans.
+
+Stöd lämpliga val mellan:
+- Gemensam axel för samma enhet.
+- Tydligt märkta separata axlar.
+- Separata synkroniserade paneler.
+- Explicit normaliserad jämförelse där det är meningsfullt.
+
+Normalisering får inte förändra lagrade rådata.
+
+Vid jämförelse av sessioner ska användaren kunna välja:
+- Absolut tid.
+- Tid sedan sessionsstart.
+- Tid relativt en vald händelse.
+
+Synliggör vald tidsjustering. Jämförelser får inte tyst ändra originaldata eller antyda att olika deltagares värden är direkt likvärdiga.
+
+## 5. Webbappens övriga flöden
+
+Skapa sammanhängande flöden för:
+- Översikt.
+- Deltagare.
+- Sessionslista med användbar sökning och filtrering.
+- Sessionsdetalj med datakvalitet och metadata.
+- Analysyta.
+- Sparade analysupplägg.
+- Konfiguration av sessionstyper, händelser och självskattningar.
+- Export av data och relevanta analysresultat.
+
+Sessionstyper och formulär ska vara konfigurerbara. Versionera formulärdefinitioner så att äldre svar behåller sin ursprungliga betydelse när ett formulär ändras.
+
+Prioritera genomförda huvudflöden framför många halvfärdiga sidor.
+
+## 6. Visuell design och användbarhet
+
+APEX ska kännas som ett genomarbetat analysverktyg.
+
+Utveckla ett konsekvent designsystem för:
+- Typografi.
+- Färger och kontrast.
+- Avstånd och layout.
+- Formulär och kontroller.
+- Diagram, axlar, markörer och tooltips.
+- Laddning, fel, tomma vyer och anslutningsstatus.
+
+Prioritera läsbarhet, tydlig hierarki och effektiv användning av skärmytan. Undvik dekorativa kort, överdrivna gradienter och animationer som stör analysen.
+
+Desktop är huvudformat för avancerad analys. Grundläggande granskning ska fungera på mindre skärmar.
+
+Väsentliga funktioner ska gå att använda med tangentbord. Drag-and-drop ska ha ett alternativ. Färg får inte vara den enda informationsbäraren.
+
+Använd realistiska syntetiska sessioner för utveckling och demonstration. Märk dem tydligt som demodata och håll dem åtskilda från riktiga sessioner.
+
+## 7. Mobilappen och Polar H10
+
+Mobilens huvuduppgift är att samla in tillförlitliga data.
+
+Utforma ett tydligt flöde för:
+1. Välj eller skapa deltagare.
+2. Välj sessionsupplägg.
+3. Anslut Polar H10.
+4. Kontrollera tillgängliga signaler och sensorkontakt.
+5. Genomför eventuell självskattning.
+6. Starta insamling.
+7. Lägg till händelser eller check-ins.
+8. Avsluta och genomför eventuell efterrapport.
+9. Granska lagring och synkroniseringsstatus.
+
+Prioritera iOS för första verifierade sensorflödet. Isolera plattformsspecifik kod och redovisa vad som faktiskt har testats på Android.
+
+Verifiera Polar SDK:s aktuella stöd, samtidiga strömmar, sampling och tidsstämplar mot officiell dokumentation och faktisk implementation.
+
+HR och RR är kärnan i första kompletta flödet. Utforma datamodellen för ECG och H10-accelerometer och inför deras fullständiga kedja i efterföljande milstolpar.
+
+Om telefonrörelse används ska dess källa, enhet och koordinatsystem skiljas tydligt från H10-rörelse.
+
+## 8. Insamling, lagring och återhämtning
+
+- Spara mätningar löpande med avgränsad minnesanvändning.
+- Låt inte UI-uppdateringar styra när data blir beständiga.
+- Undvik att skriva om en hel växande session vid varje sample.
+- Hantera avbrott och återanslutning med tydliga tillstånd.
+- Återställ så mycket som möjligt efter appkrasch eller omstart.
+- Definiera hur buffrar töms och sista samples hanteras vid sessionsslut.
+- Skilj mellan insamling, lokal lagring, uppladdning och serverbekräftelse.
+
+En avslutad session är inte automatiskt fullständigt synkroniserad.
+
+Appens beteende när skärmen låses eller appen går i bakgrunden måste verifieras på fysisk enhet. Påstå inte att bakgrundsinsaml­ing fungerar enbart utifrån konfiguration.
+
+## 9. Datamodell och synkronisering
+
+Definiera ett gemensamt, versionshanterat kontrakt mellan mobil, API och webb.
+
+Modellen behöver omfatta:
+- Arbetsyta/projekt och behörighetstillhörighet.
+- Deltagare och sessioner.
+- Sensorer och signalkällor.
+- Signaler med enheter och samplingsegenskaper.
+- Rådata och datakvalitet.
+- Självskattningar och formulärversioner.
+- Händelser och anteckningar.
+- Härledda mått med metodversion.
+- Sparade analyskonfigurationer.
+
+Bevara sensorernas ursprungliga tidsinformation när den finns. Skilj på sensortid, mottagningstid och tid som används för gemensam analys. Dokumentera antaganden och osäkerhet i tidssynkroniseringen.
+
+Synkronisering ska:
+- Kunna överföra avgränsade datapaket.
+- Tåla återförsök utan att duplicera data.
+- Kunna återupptas efter avbrott.
+- Kontrollera mottagandet innan data markeras som synkroniserade.
+- Hantera delvis mottagna sessioner.
+- Validera payloads och relationer på servern.
+- Ha tydliga fel och tidsgränser.
+
+Välj lämplig lagring för metadata respektive högfrekventa mätserier. Motivera valet med datavolym, kostnad och åtkomstmönster.
+
+## 10. Prestanda och analyskorrekthet
+
+Webben ska klara långa sessioner utan att ladda eller rendera alla råsamples samtidigt.
+
+Använd lämplig:
+- Hämtning per tidsintervall.
+- Paginering och indexering.
+- Aggregering eller flernivårepresentation.
+- Downsampling för rendering.
+- Cache där den ger konkret nytta.
+
+Bevara rådata. Skilj på data som visas i diagram och data som används för beräkningar. Dokumentera metoder så att visuell förenkling inte tyst förändrar analysresultaten.
+
+Om HRV/RMSSD införs ska RR-ordning, artefakthantering, fönsterstorlek, datatäckning och metodversion vara explicita. Visa otillräcklig datakvalitet istället för ett missvisande värde. Presentera inte fysiologiska mått som säkra diagnoser eller direkta stressmätningar.
+
+## 11. Förbered framtida livevisning
+
+Separera datainsamling, synkronisering, analysfrågor och diagramrendering.
+
+Designen ska göra det möjligt att senare:
+- Skicka datapaket under ett pågående pass.
+- Låta en behörig tränare följa inkommande data.
+- Lägga tidskopplade anteckningar under passet.
+- Visa fördröjningar och avbrott.
+- Återanvända relevanta diagramkomponenter.
+
+Inför inte en avancerad streaminginfrastruktur i första versionen om den inte behövs. Förbered tydliga gränssnitt och sessionstillstånd.
+
+## 12. Åtkomst och integritet
+
+Implementera autentisering och serverkontrollerad åtkomst till deltagare, sessioner och filer.
+
+Använd pseudonyma deltagaridentifierare som standard. Hemligheter får inte finnas i klientkod eller versionshantering.
+
+Använd syntetiska data i utveckling. Ändra inte befintlig produktionsdatabas och migrera inte riktiga deltagardata utan separat instruktion.
+
+## 13. Byggordning
+
+Arbeta i verifierbara milstolpar:
+
+1. Inspektera underlag, dokumentera beslut och skapa projektgrund.
+2. Bygg ett komplett flöde från syntetisk session via verkligt API och lagring till webbens analysyta.
+3. Implementera overlay, synkroniserad tidsinteraktion och sparade upplägg.
+4. Anslut mobilens HR/RR-insamling till samma kontrakt med beständig lokal lagring och robust synkronisering.
+5. Bygg ut med ECG/H10-rörelse, konfiguration och jämförelser.
+6. Verifiera prestanda, åtkomst, avbrott och visuella huvudflöden.
+
+Bygg inte bara en klickbar frontend med mockade knappar. Demoläge ska använda samma kontrakt och analyskomponenter som den riktiga datakedjan.
+
+## 14. Första milstolpens acceptanskriterier
+
+Den första sammanhängande versionen ska visa att:
+- En syntetisk session kan tas emot och lagras via API.
+- Upprepad överföring inte skapar dubbletter.
+- Sessionen kan öppnas i webben.
+- Två signaler kan visas som overlay med tydliga enheter.
+- Minst två paneler kan dela zoom och tidsmarkör.
+- En händelse och en datalucka visas korrekt.
+- Ett analysupplägg kan sparas och återställas efter omladdning.
+- Obehörig åtkomst till en annan arbetsytas session nekas.
+- Huvudflödet fungerar visuellt i webbläsaren.
+
+Använd riktade tester för dataintegritet, tidshantering, synkronisering och åtkomst. Testa interaktioner och granska gränssnittet visuellt.
+
+Redovisa vad som är implementerat, vad som faktiskt verifierats och vad som kräver fysisk telefon och H10. Simulerade tester får aldrig beskrivas som hårdvarutester.
+
+Börja nu med att inspektera arbetsytan. Presentera en kort bedömning och fortsätt därefter till första milstolpen. Fatta rutinbeslut själv och håll mig uppdaterad när viktiga avvägningar eller verkliga hinder uppstår.
