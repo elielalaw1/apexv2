@@ -1,0 +1,218 @@
+Designa om den befintliga APEX-dashboarden med fokus på användbarhet, tydlig informationshierarki och betydligt mindre visuellt och kognitivt brus. Implementera förändringarna i den befintliga applikationen.
+
+APEX är en anpassningsbar plattform för att samla in och analysera mätdata från träningspass, med Polar H10 som central sensor. Plattformen ska kunna användas i olika tränings- och forskningssammanhang.
+
+Den nuvarande dashboarden är för komplicerad. För många diagram, tekniska detaljer, inställningar och kontroller visas samtidigt. Vi behöver ett lugnt och intuitivt gränssnitt som fortfarande möjliggör avancerad analys.
+
+**1. Övergripande mål**
+
+Utgå från tränarens huvudsakliga arbetsflöde:
+
+Hitta ett pass → förstå förloppet → undersöka ett intervall → lägga till signaler eller jämföra pass vid behov.
+
+Användaren ska snabbt kunna förstå:
+
+- Vilket pass och vilken deltagare tittar jag på?
+- Vad visar diagrammet?
+- Vad hände under passet?
+- Hur undersöker eller jämför jag något?
+
+Använd progressive disclosure: visa det som behövs för den aktuella uppgiften och låt mer avancerade funktioner öppnas vid behov.
+
+Att minska brus innebär att prioritera, gruppera och flytta information. Behåll befintliga analysmöjligheter och dataintegritet.
+
+**2. Förenkla navigationen**
+
+Använd tre primära destinationer:
+
+- Översikt
+- Sessioner
+- Analys
+
+Placera deltagarregister och inställningar på en sekundär nivå. Gör deltagare direkt åtkomliga genom sessionslistan, deltagarfilter och klickbara deltagar-ID:n.
+
+Samla sessionstyper, formulär och annan administration under Inställningar. Undvik en otydlig samlingsmeny som ”Fler verktyg”.
+
+Använd konsekventa, begripliga svenska benämningar. ”Sparade vyer” kan exempelvis användas för sparade analyskonfigurationer, så att dessa inte blandas ihop med upplägget för själva träningspasset.
+
+**3. Översikt: hjälp användaren tillbaka till arbetet**
+
+Låt senaste sessionerna vara sidans huvudinnehåll.
+
+Varje rad visar:
+
+- Sessionsnamn
+- Deltagare
+- Datum
+- Längd
+- Status endast när den tillför relevant information
+
+Gör raden klickbar och låt den öppna passets analys. Undvik flera konkurrerande knappar som ”Öppna”, ”Detaljer” och ”Analysera” på varje rad.
+
+Visa totalantal sessioner, deltagare och mättid diskret om de tillför värde. De ska inte dominera sidan som stora KPI-kort.
+
+Undvik dekorativa diagram, överflödiga introduktionstexter och upprepade etiketter.
+
+**4. Sessioner: en lättöverskådlig lista**
+
+Använd en ren lista eller tabell med tydlig sökning och deltagarfilter. Placera mindre vanliga filter under en gemensam filterknapp.
+
+Visa aktiva filter tydligt och gör dem enkla att återställa.
+
+Sessionsdetaljer ska kunna öppnas från analysvyn utan att användaren tappar sitt valda pass eller sin analys.
+
+Flytta följande till en separat sektion för tekniska detaljer:
+
+- Datakällans identifierare
+- Tidspolicy
+- Schema- och formulärversioner
+- Antal råsamples
+- Tekniska signalidentifierare
+
+**5. Analys: börja enkelt**
+
+När användaren öppnar ett pass utan en uttryckligen vald sparad vy ska standardläget visa:
+
+- Sessionsnamn och deltagare
+- Datum och längd
+- Ett stort, tydligt hjärtfrekvensdiagram
+- Relevanta händelsemarkeringar
+- ”Lägg till signal”
+- ”Jämför pass”
+
+Om hjärtfrekvens saknas, välj en tillgänglig signal och gör valet tydligt.
+
+Öppna inte automatiskt tre paneler, flera sessioner eller en avancerad inställningsyta. Om användaren däremot öppnar en sparad vy ska dess konfiguration respekteras.
+
+Prioritera själva diagrammet. Tekniska detaljer och inställningar ska inte konkurrera om uppmärksamheten.
+
+**6. Gör anpassning uppgiftsbaserad**
+
+”Lägg till signal” ska visa signaler med data för det valda passet, med begripliga namn och enheter.
+
+ECG och H10-acceleration ska inte visas som tillgängliga val när passet saknar sådan data.
+
+Gör det enkelt att lägga till en signal i befintligt diagram eller i ett separat diagram. Välj ett begripligt standardbeteende för olika enheter och gör resultatet enkelt att ändra.
+
+”Jämför pass” ska öppna en sökbar sessionsväljare med deltagare, datum och passnamn. Bevara stödet för upp till fyra sessioner.
+
+Använd sessionsstart som standard för tidsjustering vid jämförelse. Absolut tid och justering efter vald händelse placeras under avancerade alternativ. Om en vald händelse saknas i ett pass ska detta visas tydligt.
+
+Samla mer avancerade inställningar i en panel som öppnas med ”Anpassa”:
+
+- Signaler och valda sessioner
+- Gemensamma eller separata axlar
+- Normalisering
+- Färger och linjestil
+- Diagramstorlek, ordning och synlighet
+
+Visa relevanta standardval först. Normalisering, transparens och andra specialinställningar ska inte dominera.
+
+Inställningspanelen ska gå att stänga utan att ändringar går förlorade. Att öppna eller stänga den ska bevara tidsintervall, zoom och sessionsval.
+
+**7. Diagram ska vara begripliga och pålitliga**
+
+Använd:
+
+- Tydliga enheter och axelrubriker
+- Diskreta stödlinjer
+- Konsekventa färger för respektive signal och session
+- En kompakt legend som skiljer sessioner åt även när deltagaren är densamma
+- Läsbara värden vid pekning eller markering
+- Gemensam tidsmarkör när flera diagram visas
+- En tydlig kontroll för att återgå till hela passet
+
+Skilj tydligt mellan zoomning, panorering och intervallmarkering. Samma draggest ska inte ge tvetydiga resultat.
+
+Visa intervallstatistik i anslutning till ett markerat intervall i stället för att permanent fylla varje diagram med statistik.
+
+Bevara dataluckor och markeringar för osäker mätkvalitet. Dra inte linjer över saknad data på ett sätt som antyder kontinuerliga mätningar.
+
+Använd inte normalisering automatiskt utan tydlig märkning. Undvik missvisande gemensamma axlar för signaler med olika enheter.
+
+Presentera inga automatiska slutsatser om stress, återhämtning eller prestation som mätdata inte ger stöd för.
+
+**8. Händelser och datakvalitet utan överbelastning**
+
+Visa händelser som diskreta markeringar. Detaljer som namn, tid och självskattningsvärde visas vid klick eller tangentbordsfokus.
+
+Hantera överlappande händelser så att etiketterna inte fyller diagrammet.
+
+Detaljerad kvalitetsinformation öppnas vid behov. Problem som påverkar tolkningen ska fortfarande vara synliga i anslutning till den berörda signalen.
+
+Skilj mellan saknad data, osäker data och fel vid inläsning.
+
+Visa demomärkning tydligt på sidnivå när hela vyn innehåller syntetisk data. Vid blandning av demo och riktiga mätningar måste respektive källa gå att identifiera.
+
+**9. Sparade vyer, export och formulär**
+
+Gör ”Spara vy” tillgängligt utan att hela hanteringen av upplägg visas permanent.
+
+Placera öppna, duplicera, döpa om och exportera en vy i en samlad meny. Använd diskret men tydlig återkoppling om osparade ändringar.
+
+Bevara rådataexport till CSV och export av analyskonfiguration till JSON i relevanta menyer.
+
+Formulär ska i första hand redigeras med vanliga gränssnittskontroller:
+
+- Frågetext
+- Svarstyp
+- Skala eller svarsalternativ
+- När frågan ställs
+
+JSON-redigering får finnas under avancerade inställningar. Bevara versionshantering och historiska formulärkopplingar. Ändringar får inte skriva om innebörden av tidigare insamlade svar.
+
+**10. Visuell riktning**
+
+Gränssnittet ska kännas lugnt, precist och professionellt.
+
+- Använd neutrala bakgrunder och en återhållsam accentfärg.
+- Reservera tydliga färger främst för data, aktiva val och relevanta varningar.
+- Skapa hierarki med typografi, mellanrum och placering.
+- Undvik kort inuti kort, kraftiga skuggor, överdrivet rundade behållare och dekorativa gradienter.
+- Gruppera kontroller efter uppgift.
+- Använd textetiketter för viktiga handlingar.
+- Undvik att minska brus genom att göra text liten eller kontrasten svag.
+- Visa en tydlig huvudsaklig handling per sammanhang.
+
+Utnyttja skärmytan väl. Lugn design ska fortfarande ge tillräckligt utrymme för data och jämförelser.
+
+**11. Tillgänglighet och responsivitet**
+
+Alla centrala handlingar ska fungera med tangentbord och ha synliga fokuslägen.
+
+Förmedla inte information enbart genom färg eller hover.
+
+På mindre skärmar ska paneler staplas och inställningar öppnas separat så att diagrammen förblir användbara.
+
+Skapa tydliga tillstånd för laddning, tomma listor, saknade signaler och fel. Varje tillstånd ska förklara vad användaren kan göra härnäst.
+
+**12. Arbeta i den befintliga applikationen**
+
+Börja med att granska kodbasen, navigationen, diagramkomponenterna och hur analyskonfigurationer sparas.
+
+Implementera därefter förändringarna. Leverera inte enbart en plan eller en fristående mockup.
+
+Återanvänd fungerande komponenter och befintlig teknik där det är rimligt. Bevara datainsamling, beräkningar, exporter och sparade konfigurationer. Om ett schema behöver ändras ska befintliga sparade vyer fortsatt fungera genom kompatibilitet eller migration.
+
+Den aktuella demon innehåller fyra sessioner, tre deltagare och 72 minuters syntetisk mättid. Bevara dessa uppgifter och deras tydliga demostatus.
+
+Liveövervakning är en möjlig framtida funktion. Lägg inte till tomma livevyer eller framtida kontroller i denna redesign.
+
+**13. Kriterier för ett färdigt resultat**
+
+Verifiera att:
+
+- Ett pass kan öppnas för analys direkt från översikten.
+- En ny analys börjar med ett begripligt diagram.
+- En signal kan läggas till utan att användaren behöver förstå panelkonfigurationer.
+- Ett annat pass kan jämföras genom ”Jämför pass”.
+- Avancerad analys fortfarande är tillgänglig vid behov.
+- Diagrammen tydligt identifierar signal, session och enhet.
+- Dataluckor och kvalitetsproblem fortfarande framgår.
+- Tekniska identifierare, versioner och JSON inte syns i det vanliga analysflödet.
+- Sparade vyer och exporter fortfarande fungerar.
+- Huvudflödet fungerar med tangentbord och på mindre skärmar.
+
+Kontrollera resultatet i den körande applikationen, inte bara i koden. Rapportera kort vad som ändrats, vilka flöden som verifierats och eventuella kvarvarande begränsningar.
+
+Fatta själv rimliga designbeslut inom denna riktning. Prioritera ett sammanhängande och genomarbetat huvudflöde där tränaren får mer komplexitet först när uppgiften kräver det.

@@ -20,14 +20,14 @@ export async function drainOutbox(
     for (const row of rows) {
       const batch = BatchSchema.parse(JSON.parse(row.payload));
       if (row.id !== batch.batchId)
-        throw Error("Utkorgens ID matchar inte paketet");
+        throw Error("Outbox ID does not match the batch");
       const ack = await send(batch);
       if (
         ack.version !== 1 ||
         ack.batchId !== batch.batchId ||
         ack.accepted !== batch.samples.length
       )
-        throw Error("Serverns kvittens matchar inte paketet");
+        throw Error("Server acknowledgment does not match the batch");
       await acknowledge(row.id);
       progress(++total);
     }

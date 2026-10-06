@@ -24,17 +24,18 @@ Demodata lagras genom samma validerade ingest-kedja som mobilmätningar. Databas
 
 ## Webbflöden
 
-- Starta i en enkel översikt med senaste sessionerna. Öppna en session eller gå vidare till analysen.
+- Gränssnittet är på engelska. Starta i **Overview** och klicka på en sessionsrad för att öppna analysen.
 - Deltagare, filtrerade sessioner och sessionsdetaljer med metadata/datakvalitet.
-- Analysens upplägg och panelredigering visas via **Anpassa analys**. Datakvalitet och export öppnas vid behov; extra navigation finns under **Fler verktyg**.
+- En ny analys börjar med ett stort hjärtfrekvensdiagram, eller första tillgängliga signal om HR saknas. **Add signal** visar endast signaler med data; **Compare sessions** öppnar en sökbar väljare för upp till fyra pass.
+- **Customize** öppnar avancerad redigering. **View options** samlar öppna, duplicera, döpa om och exportera sparade vyer. **Settings** samlar administration och formulär.
 - Analysyta: lägg till, ta bort, flytta med drag eller knappar, ändra bredd/höjd och konfigurera paneler. Upp till fyra sessioner och två signalval per panel i gränssnittet.
 - Overlay med märkta enheter, gemensam axel för samma enhet, två separata axlar eller explicit z-normalisering. Länkad markör, zoom/panorering och intervallstatistik från rådata.
 - Absolut tid, sessionsrelativ tid och händelserelativ tid. Händelse som saknas ger ett synligt fel.
 - Namnge, spara, öppna, ändra och duplicera upplägg. Definitionerna har schema v1.
-- Versionerade numeriska självskattningar, händelser och sessionstyper via JSON-editor. Äldre definitioner får inte ersättas.
+- Versionerade numeriska självskattningar, händelser och sessionstyper redigeras med vanliga formulärkontroller. JSON finns under **Advanced JSON**. Äldre definitioner får inte ersättas.
 - Paginerad rådataexport till CSV och export av analyskonfiguration till JSON.
 
-Diagrammets tangentbord: `+` / `−` zoomar och piltangenter panorerar. De synliga tidsknapparna är ett alternativ till drag. Diagrammen interpolerar inte över luckor eller otillräcklig mätkvalitet.
+Diagrammets tangentbord: `+` / `−` zoomar, piltangenter flyttar markören, `Shift` + piltangent panorerar, `Enter` markerar 30 sekunder runt markören och `Escape` tar bort markeringen. **Drag to** väljer separat mellan markering, zoom och panorering. Intervallstatistik visas endast efter markering. Händelser kan öppnas med klick eller tangentbord. Diagrammen interpolerar inte över luckor eller otillräcklig mätkvalitet.
 
 ## Mobil
 
@@ -73,7 +74,7 @@ Repot finns lokalt på grenen `main`; det har inte publicerats på GitHub.
 
 ## Dokumentation och driftgräns
 
-[Krav](docs/REQUIREMENTS.md) · [Arkitektur](docs/ARCHITECTURE.md) · [Plan](docs/PLAN.md) · [Status](docs/STATUS.md) · [API](docs/API.md) · [Mobiltest](docs/MOBILE_VERIFICATION.md)
+[Omdesign](docs/REDESIGN.md) · [Krav](docs/REQUIREMENTS.md) · [Arkitektur](docs/ARCHITECTURE.md) · [Plan](docs/PLAN.md) · [Status](docs/STATUS.md) · [API](docs/API.md) · [Mobiltest](docs/MOBILE_VERIFICATION.md)
 
 Detta är en lokalt körbar utvecklingsversion, inte en driftsatt tjänst för deltagardata. Stäng demokonton med `APEX_DEMO_ENABLED=false`. Då behövs separat provisionering av användare. Produktionsautentisering, krypterad lagring, åtkomstroller, begränsning av inloggningsförsök, retention, backup och kapacitetsmätning återstår. Bakom proxy används `APEX_PUBLIC_ORIGIN` för det offentliga HTTPS-ursprunget. Inga hemligheter eller riktiga deltagardata följer med repot.
 

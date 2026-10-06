@@ -12,7 +12,7 @@ export function login(email: string, password: string) {
   ).split(":");
   const actual = scryptSync(password, salt, 64);
   if (!timingSafeEqual(actual, Buffer.from(hash, "hex")) || !user)
-    throw new ApiError(401, "Fel e-post eller lösenord");
+    throw new ApiError(401, "Incorrect email or password");
   const token = randomBytes(32).toString("hex");
   db.prepare("INSERT INTO auth VALUES(?,?,?)").run(
     sha(token),
@@ -26,13 +26,13 @@ export async function currentUser(request?: Request): Promise<User> {
     .get("authorization")
     ?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
   const token = bearer || (await cookies()).get("apex_session")?.value;
-  if (!token) throw new ApiError(401, "Logga in för att fortsätta");
+  if (!token) throw new ApiError(401, "Sign in to continue");
   const row = getDb()
     .prepare(
       "SELECT u.* FROM users u JOIN auth a ON a.user_id=u.id WHERE a.token=? AND a.expires>?",
     )
     .get(sha(token), Date.now()) as User | undefined;
-  if (!row) throw new ApiError(401, "Din inloggning har gått ut");
+  if (!row) throw new ApiError(401, "Your sign-in has expired");
   return row;
 }
 export function checkOrigin(req: Request) {
@@ -42,5 +42,5 @@ export function checkOrigin(req: Request) {
     process.env.APEX_PUBLIC_ORIGIN ??
     `${url.protocol}//${req.headers.get("host") ?? url.host}`;
   if (origin && origin !== expected)
-    throw new ApiError(403, "Begäran måste komma från samma ursprung");
+    throw new ApiError(403, "Request must originate from the same origin");
 }

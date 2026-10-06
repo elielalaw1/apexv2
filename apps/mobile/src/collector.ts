@@ -31,13 +31,13 @@ export async function start(
   answers: Record<string, number>,
   template = defaultTemplate,
 ) {
-  if (session) throw Error("Avsluta eller återställ befintlig session först");
+  if (session) throw Error("Finish or recover the current session first");
   if (!Polar)
     throw Error(
-      "Polar kräver en native development build; Expo Go saknar bryggan.",
+      "Polar requires a native development build; Expo Go does not include the bridge.",
     );
   const state = await Polar.getConnectionState();
-  if (!state.isConnected) throw Error("Anslut Polar H10 först");
+  if (!state.isConnected) throw Error("Connect Polar H10 first");
   await saveLocalTemplate(ws, template);
   workspace = ws;
   indices = { hr: 0, rr: 0 };
@@ -99,7 +99,7 @@ export async function start(
     try {
       writer.append(SampleSchema.parse(s));
     } catch (e) {
-      fatalError = e instanceof Error ? e.message : "Insamlingen stoppades";
+      fatalError = e instanceof Error ? e.message : "Recording stopped";
       closing = true;
       void Polar?.stopHeartRateStream();
       void Polar?.stopRRStream();
@@ -118,7 +118,7 @@ export async function start(
         wasConnected = s.isConnected;
         if (session.events.length >= 970) {
           fatalError =
-            "För många anslutningsavbrott. Avsluta och säkra sessionen.";
+            "Too many connection interruptions. Finish and save the session.";
           closing = true;
           void Polar?.stopHeartRateStream();
           void Polar?.stopRRStream();
@@ -128,7 +128,7 @@ export async function start(
           id: randomUUID(),
           t: Date.now() - session.startedAt,
           type: s.isConnected ? "reconnect" : "disconnect",
-          label: s.isConnected ? "H10 ansluten" : "H10 frånkopplad",
+          label: s.isConnected ? "H10 connected" : "H10 disconnected",
         });
         void saveSession(
           {
@@ -146,7 +146,7 @@ export async function start(
               await Polar?.startRRStream();
             } catch (e) {
               fatalError =
-                e instanceof Error ? e.message : "Återanslutning misslyckades";
+                e instanceof Error ? e.message : "Reconnection failed";
             }
           })();
       }
@@ -161,9 +161,9 @@ export async function start(
   }
 }
 export async function event(label: string) {
-  if (!session) throw Error("Ingen aktiv session");
+  if (!session) throw Error("No active session");
   if (session.events.length >= 970)
-    throw Error("Gränsen för händelser är uppnådd. Avsluta sessionen.");
+    throw Error("Event limit reached. Finish the session.");
   session.events.push({
     id: randomUUID(),
     t: Date.now() - session.startedAt,

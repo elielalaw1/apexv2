@@ -18,6 +18,7 @@ import * as SecureStore from "expo-secure-store";
 import { randomUUID } from "expo-crypto";
 import Polar, { PolarConnectionStatePayload } from "./modules/apex-polar";
 import { Session, Template, defaultTemplate } from "../../src/core/contract";
+import { displayText } from "../../src/core/presentation";
 import { start, event, finish, snapshot } from "./src/collector";
 import {
   counts,
@@ -74,7 +75,7 @@ function validateAnswers(
       value < q.min ||
       value > q.max
     )
-      throw Error(`${q.label}: ange ${q.min}–${q.max}`);
+      throw Error(`${displayText(q.label)}: enter ${q.min}–${q.max}`);
     out[q.id] = value;
   }
   return out;
@@ -125,7 +126,7 @@ export default function App() {
     try {
       await fn();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Åtgärden misslyckades");
+      setMessage(e instanceof Error ? e.message : "The action failed");
     } finally {
       setBusy(false);
     }
@@ -174,7 +175,7 @@ export default function App() {
     const app = AppState.addEventListener("change", (state) => {
       if (state !== "active" && snapshot().session)
         setMessage(
-          "Bakgrundsläge: fortsatt H10-insamling måste verifieras på fysisk enhet.",
+          "Background recording must be verified on a physical device.",
         );
     });
     return () => {
@@ -186,7 +187,7 @@ export default function App() {
   async function login() {
     await act(async () => {
       if (!/^https?:\/\//.test(server))
-        throw Error("Ange http eller https-serveradress");
+        throw Error("Enter an HTTP or HTTPS server address");
       const r = await request<{ token: string; user: { workspace: string } }>(
         server,
         "auth/login",
@@ -209,7 +210,7 @@ export default function App() {
         }
       }
       setMessage(
-        "Inloggad. Paket kvitteras av servern innan de markeras synkroniserade.",
+        "Signed in. Batches are marked synced only after server acknowledgment.",
       );
     });
   }
@@ -217,7 +218,7 @@ export default function App() {
     await act(async () => {
       if (!Polar)
         throw Error(
-          "Installera development build för Polar H10. Expo Go stöds inte.",
+          "Install a development build for Polar H10. Expo Go is not supported.",
         );
       if (Platform.OS === "android") {
         const result = await PermissionsAndroid.requestMultiple([
@@ -226,7 +227,7 @@ export default function App() {
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ]);
         if (Object.values(result).some((v) => v !== "granted"))
-          throw Error("Bluetooth-behörighet krävs");
+          throw Error("Bluetooth permission is required");
       }
       await Polar.startScan();
       setConnection(await Polar.getConnectionState());
@@ -240,7 +241,7 @@ export default function App() {
           id: randomUUID(),
           participantId: participant,
           participantLabel: participant,
-          title: "Simulerat mobilpass",
+          title: "Synthetic mobile session",
           typeId: template.id,
           typeVersion: template.version,
           startedAt: now,
@@ -278,7 +279,7 @@ export default function App() {
       await seal(s, account.workspace);
       await refresh();
       setMessage(
-        "Syntetisk mobilmätning lagrad. Tryck Synkronisera för verklig API-överföring.",
+        "Synthetic recording saved. Tap Sync pending batches to upload it.",
       );
     });
   }
@@ -294,14 +295,14 @@ export default function App() {
             <Text style={styles.logo}>
               apex<Text style={styles.vip}> VIP</Text>
             </Text>
-            <Text style={styles.tag}>INSAMLING</Text>
+            <Text style={styles.tag}>RECORDING</Text>
           </View>
-          <Text style={styles.eyebrow}>MÄTNING / POLAR H10</Text>
+          <Text style={styles.eyebrow}>RECORDING / POLAR H10</Text>
           <Text style={styles.title}>
-            {current.session ? "Mätning pågår" : "Redo att mäta."}
+            {current.session ? "Recording in progress" : "Ready to record."}
           </Text>
           <Text style={styles.subtitle}>
-            Puls och RR. Lokalt först, sedan kvitterad synkronisering.
+            Heart rate and RR. Saved locally, then synced to your workspace.
           </Text>
           {message !== "" && (
             <View accessibilityRole="alert" style={styles.notice}>
@@ -310,38 +311,38 @@ export default function App() {
           )}
           {!account ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Anslut till arbetsyta</Text>
-              <Text style={styles.label}>Serveradress</Text>
+              <Text style={styles.sectionTitle}>Connect to workspace</Text>
+              <Text style={styles.label}>Server address</Text>
               <TextInput
                 style={styles.input}
-                accessibilityLabel="Serveradress"
+                accessibilityLabel="Server address"
                 autoCapitalize="none"
                 value={server}
                 onChangeText={setServer}
               />
               <Text style={styles.hint}>
-                Fysisk iPhone: använd Macens LAN-adress eller HTTPS-server.
-                127.0.0.1 fungerar i iOS-simulator.
+                On iPhone, use your Mac’s LAN address or an HTTPS server. Use
+                127.0.0.1 in the iOS simulator.
               </Text>
-              <Text style={styles.label}>E-post</Text>
+              <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
-                accessibilityLabel="E-post"
+                accessibilityLabel="Email"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
                 onChangeText={setEmail}
               />
-              <Text style={styles.label}>Lösenord</Text>
+              <Text style={styles.label}>Password</Text>
               <TextInput
                 style={styles.input}
-                accessibilityLabel="Lösenord"
+                accessibilityLabel="Password"
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
               />
               <Button
-                title="Logga in"
+                title="Sign in"
                 onPress={() => void login()}
                 disabled={busy}
               />
@@ -349,11 +350,9 @@ export default function App() {
           ) : (
             <>
               <View style={styles.project}>
-                <Text style={styles.label}>ARBETSYTA</Text>
+                <Text style={styles.label}>WORKSPACE</Text>
                 <Text style={styles.projectName}>{account.workspace}</Text>
-                <Text style={styles.hint}>
-                  Pseudonyma deltagare · Kontrakt v1
-                </Text>
+                <Text style={styles.hint}>Pseudonymous participants</Text>
               </View>
               {!current.session ? (
                 <>
@@ -361,19 +360,19 @@ export default function App() {
                     <View style={styles.sectionHeader}>
                       <Text style={styles.step}>01</Text>
                       <Text style={styles.sectionTitle}>
-                        Deltagare & upplägg
+                        Participant & session type
                       </Text>
                     </View>
-                    <Text style={styles.label}>Deltagar-ID</Text>
+                    <Text style={styles.label}>Participant ID</Text>
                     <TextInput
                       style={styles.input}
-                      accessibilityLabel="Deltagar-ID"
+                      accessibilityLabel="Participant ID"
                       value={participant}
                       onChangeText={setParticipant}
                       autoCapitalize="none"
                     />
                     <Text style={styles.hint}>
-                      Använd ett pseudonymt ID, exempelvis P-014.
+                      Use a pseudonymous ID, such as P-014.
                     </Text>
                     <View style={styles.chips}>
                       {templates.map((t) => (
@@ -389,7 +388,7 @@ export default function App() {
                           ]}
                         >
                           <Text style={styles.chipText}>
-                            {t.title} v{t.version}
+                            {displayText(t.title)} v{t.version}
                           </Text>
                         </Pressable>
                       ))}
@@ -402,25 +401,25 @@ export default function App() {
                     </View>
                     <Text style={styles.sensorStatus}>
                       {connection?.isConnected
-                        ? "Ansluten · " + connection.name
+                        ? "Connected · " + connection.name
                         : connection?.connectionState === "scanning"
-                          ? "Söker efter sensorer…"
-                          : "Ingen sensor ansluten"}
+                          ? "Searching for sensors…"
+                          : "No sensor connected"}
                     </Text>
                     <Text style={styles.hint}>
-                      Sätt på bandet och fukta elektroderna. Sensorkontakt
-                      märker varje sample som mätt eller osäkert.
+                      Put on the strap and wet the electrodes. Sensor contact
+                      marks each sample as measured or uncertain.
                     </Text>
                     {connection?.isConnected && (
                       <Text style={styles.hint}>
                         {preview
-                          ? `${preview.bpm} bpm · RR ${preview.rrAvailable ? "tillgängligt" : "saknas"} · Kontakt ${!preview.contactSupported ? "okänd" : preview.contactDetected ? "god" : "osäker"}`
-                          : "Väntar på första HR-paket för kontaktkontroll…"}
+                          ? `${preview.bpm} bpm · RR ${preview.rrAvailable ? "available" : "missing"} · Contact ${!preview.contactSupported ? "unknown" : preview.contactDetected ? "good" : "uncertain"}`
+                          : "Waiting for the first HR packet to check contact…"}
                       </Text>
                     )}
                     {connection?.discoveredDevices.map((d) => (
                       <Button
-                        title={`Anslut ${d.name} · ${d.id}`}
+                        title={`Connect ${d.name} · ${d.id}`}
                         key={d.id}
                         secondary
                         disabled={busy}
@@ -433,7 +432,7 @@ export default function App() {
                       />
                     ))}
                     <Button
-                      title="Sök Polar H10"
+                      title="Find Polar H10"
                       secondary
                       disabled={busy}
                       onPress={() => void scan()}
@@ -442,17 +441,17 @@ export default function App() {
                   <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                       <Text style={styles.step}>03</Text>
-                      <Text style={styles.sectionTitle}>Före mätningen</Text>
+                      <Text style={styles.sectionTitle}>Before recording</Text>
                     </View>
                     {template.questions
                       .filter((q) => q.phase === "pre")
                       .map((q) => (
                         <View key={q.id} style={{ gap: 8 }}>
                           <Text style={styles.label}>
-                            {q.label} · {q.min}–{q.max}
+                            {displayText(q.label)} · {q.min}–{q.max}
                           </Text>
                           <TextInput
-                            accessibilityLabel={q.label}
+                            accessibilityLabel={displayText(q.label)}
                             style={styles.input}
                             keyboardType="numeric"
                             value={answers[q.id] ?? ""}
@@ -463,7 +462,7 @@ export default function App() {
                         </View>
                       ))}
                     <Button
-                      title="Starta HR/RR-insamling"
+                      title="Start HR/RR recording"
                       disabled={
                         busy ||
                         !connection?.isConnected ||
@@ -475,7 +474,7 @@ export default function App() {
                         void act(async () => {
                           if (!/^[a-zA-Z0-9_.:-]{1,128}$/.test(participant))
                             throw Error(
-                              "Deltagar-ID: bokstäver, siffror, bindestreck eller punkt.",
+                              "Participant ID: letters, numbers, hyphens or dots.",
                             );
                           await start(
                             participant,
@@ -484,7 +483,7 @@ export default function App() {
                             template,
                           );
                           setCurrent(snapshot());
-                          setMessage("Samples sparas löpande i lokal SQLite.");
+                          setMessage("Samples are being saved locally.");
                         })
                       }
                     />
@@ -493,7 +492,8 @@ export default function App() {
               ) : (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>
-                    {current.session.participantLabel} · {template.title}
+                    {current.session.participantLabel} ·{" "}
+                    {displayText(template.title)}
                   </Text>
                   <Text style={styles.duration}>
                     {Math.floor(
@@ -508,12 +508,12 @@ export default function App() {
                   </Text>
                   <Text style={styles.sensorStatus}>
                     {connection?.isConnected
-                      ? "H10 ansluten"
-                      : "Anslutningen bröts · mätningen väntar"}
+                      ? "H10 connected"
+                      : "Connection lost · recording is waiting"}
                   </Text>
                   {!connection?.isConnected && (
                     <Button
-                      title="Återanslut H10"
+                      title="Reconnect H10"
                       secondary
                       disabled={busy}
                       onPress={() =>
@@ -528,8 +528,8 @@ export default function App() {
                     />
                   )}
                   <Text style={styles.hint}>
-                    {current.persisted} samples beständigt lagrade · Kontakt{" "}
-                    {current.contact ? "god" : "osäker"}
+                    {current.persisted} samples saved to storage · Contact{" "}
+                    {current.contact ? "good" : "uncertain"}
                   </Text>
                   {current.error && (
                     <Text style={styles.error}>{current.error}</Text>
@@ -537,14 +537,14 @@ export default function App() {
                   <View style={styles.chips}>
                     {template.eventLabels.map((label) => (
                       <Button
-                        title={label}
+                        title={displayText(label)}
                         key={label}
                         secondary
                         disabled={busy}
                         onPress={() =>
                           void act(async () => {
                             await event(label);
-                            setMessage(`Händelse: ${label}`);
+                            setMessage(`Event: ${displayText(label)}`);
                           })
                         }
                       />
@@ -555,10 +555,10 @@ export default function App() {
                     .map((q) => (
                       <View key={q.id} style={{ gap: 8 }}>
                         <Text style={styles.label}>
-                          {q.label} · {q.min}–{q.max}
+                          {displayText(q.label)} · {q.min}–{q.max}
                         </Text>
                         <TextInput
-                          accessibilityLabel={q.label}
+                          accessibilityLabel={displayText(q.label)}
                           style={styles.input}
                           keyboardType="numeric"
                           value={answers[q.id] ?? ""}
@@ -569,7 +569,7 @@ export default function App() {
                       </View>
                     ))}
                   <Button
-                    title="Avsluta och säkra mätning"
+                    title="Finish and save recording"
                     disabled={busy}
                     onPress={() =>
                       void act(async () => {
@@ -579,7 +579,7 @@ export default function App() {
                         setCurrent(snapshot());
                         await refresh();
                         setMessage(
-                          "Sista bufferten tömd. Avslutad session väntar på serverkvittens.",
+                          "Final buffer saved. The session is ready to sync.",
                         );
                       })
                     }
@@ -589,7 +589,7 @@ export default function App() {
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.step}>04</Text>
-                  <Text style={styles.sectionTitle}>Lagring & synk</Text>
+                  <Text style={styles.sectionTitle}>Storage & sync</Text>
                 </View>
                 {rows.map((r) => (
                   <View style={styles.localRow} key={r.session.id}>
@@ -600,14 +600,14 @@ export default function App() {
                     <Text style={styles.hint}>
                       {r.samples} samples ·{" "}
                       {!r.sealed
-                        ? "Avbruten / inte avslutad"
+                        ? "Interrupted / unfinished"
                         : r.pending
-                          ? `${r.pending} paket väntar`
-                          : "Serverkvitterad"}
+                          ? `${r.pending} pending batches`
+                          : "Synced to server"}
                     </Text>
                     {!r.sealed && r.session.id !== current.session?.id && (
                       <Button
-                        title="Återställ avslut efter avbrott"
+                        title="Recover interrupted session"
                         secondary
                         disabled={busy}
                         onPress={() =>
@@ -615,7 +615,7 @@ export default function App() {
                             await recover(r.session.id, account.workspace);
                             await refresh();
                             setMessage(
-                              "Beständiga samples återställda. Ej sparad minnesbuffert kan saknas.",
+                              "Saved samples recovered. The last unsaved buffer may be missing.",
                             );
                           })
                         }
@@ -624,7 +624,7 @@ export default function App() {
                   </View>
                 ))}
                 <Button
-                  title="Synkronisera väntande paket"
+                  title="Sync pending batches"
                   disabled={busy}
                   onPress={() =>
                     void act(async () => {
@@ -632,28 +632,28 @@ export default function App() {
                         account.server,
                         account.token,
                         account.workspace,
-                        (n) => setMessage(`${n} paket kvitterade…`),
+                        (n) => setMessage(`${n} batches acknowledged…`),
                       );
                       await refresh();
                       setMessage(
-                        `${n} paket kvitterade av servern. Rådata finns kvar lokalt.`,
+                        `${n} batches acknowledged by the server. Raw data remains on this device.`,
                       );
                     })
                   }
                 />
                 <Button
-                  title="Skapa syntetiskt testpass"
+                  title="Create synthetic test session"
                   secondary
                   disabled={busy || !!current.session}
                   onPress={() => void demo()}
                 />
                 <Text style={styles.hint}>
-                  Testpasset använder samma lagring, utkorg och API. Det är inte
-                  ett hårdvarutest.
+                  The test uses the same storage, outbox and API. It does not
+                  test sensor hardware.
                 </Text>
               </View>
               <Button
-                title="Logga ut"
+                title="Sign out"
                 secondary
                 disabled={busy || !!current.session}
                 onPress={() =>
@@ -667,7 +667,7 @@ export default function App() {
                       );
                     } catch {
                       setMessage(
-                        "Utloggad lokalt. Serverns session kunde inte återkallas utan anslutning.",
+                        "Signed out locally. Could not revoke the server session without a connection.",
                       );
                     }
                     await Polar?.stopHeartRateStream();
@@ -681,8 +681,8 @@ export default function App() {
           )}
           {busy && <ActivityIndicator color="#2b766b" style={{ margin: 12 }} />}
           <Text style={styles.footer}>
-            apexVIP / Lokal insamling · HR + RR{"\n"}ECG och H10-rörelse är
-            kommande milstolpar.
+            apexVIP / Local recording · HR + RR{"\n"}ECG and H10 motion are
+            planned milestones.
           </Text>
         </ScrollView>
       </SafeAreaView>

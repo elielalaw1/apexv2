@@ -28,68 +28,44 @@ import {
   Template,
   defaultTemplate,
 } from "@/core/contract";
+import { displayText } from "@/core/presentation";
+import QuestionnaireEditor from "./QuestionnaireEditor";
 import Chart, { api, offset, Range, timeLabel } from "./Chart";
 type View =
-  | "Översikt"
-  | "Sessioner"
-  | "Deltagare"
-  | "Analysyta"
-  | "Upplägg"
-  | "Konfiguration";
+  | "Overview"
+  | "Sessions"
+  | "Participants"
+  | "Analysis"
+  | "Saved views"
+  | "Settings";
 const nav = [
-  ["Översikt", SquaresFourIcon],
-  ["Sessioner", ListBulletsIcon],
-  ["Deltagare", UsersIcon],
-  ["Analysyta", ChartLineIcon],
-  ["Upplägg", BookmarkSimpleIcon],
-  ["Konfiguration", SlidersHorizontalIcon],
+  ["Overview", SquaresFourIcon],
+  ["Sessions", ListBulletsIcon],
+  ["Participants", UsersIcon],
+  ["Analysis", ChartLineIcon],
+  ["Saved views", BookmarkSimpleIcon],
+  ["Settings", SlidersHorizontalIcon],
 ] as const;
-function initialLayout(s: Session[]): Layout {
+function initialLayout(s: Session[], signal: SignalKind = "hr"): Layout {
   return {
     version: 1,
-    id: "layout-default",
-    title: "Belastning & återhämtning",
+    id: crypto.randomUUID(),
+    title: displayText(s[0].title),
     alignment: "elapsed",
     anchorLabel: "Arbete",
     panels: [
       {
-        id: "cardio",
-        title: "Hjärtfrekvens & RR",
-        sessionIds: [s[0].id],
-        signalKinds: ["hr", "rr"],
-        axis: "separate",
-        color: signals.hr.color,
+        id: crypto.randomUUID(),
+        title: signals[signal].name,
+        sessionIds: s.slice(0, 4).map((x) => x.id),
+        signalKinds: [signal],
+        axis: "shared",
+        color: signals[signal].color,
         lineWidth: 1.8,
         opacity: 1,
         visible: true,
         width: 2,
-        height: 340,
-      },
-      {
-        id: "comparison",
-        title: "Jämför hjärtfrekvens",
-        sessionIds: s.slice(0, 2).map((s) => s.id),
-        signalKinds: ["hr"],
-        axis: "shared",
-        color: signals.hr.color,
-        lineWidth: 1.8,
-        opacity: 0.9,
-        visible: true,
-        width: 1,
-        height: 320,
-      },
-      {
-        id: "motion",
-        title: "Telefonrörelse",
-        sessionIds: [s[0].id],
-        signalKinds: ["phoneacc"],
-        axis: "shared",
-        color: signals.phoneacc.color,
-        lineWidth: 1.5,
-        opacity: 0.8,
-        visible: true,
-        width: 1,
-        height: 320,
+        height: 460,
       },
     ],
   };
@@ -110,7 +86,7 @@ export default function Dashboard() {
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [error, setError] = useState("");
-  const [view, setView] = useState<View>("Översikt"),
+  const [view, setView] = useState<View>("Overview"),
     [sessions, setSessions] = useState<Session[]>([]),
     [saved, setSaved] = useState<Layout[]>([]),
     [templates, setTemplates] = useState<Template[]>([]),
@@ -123,9 +99,24 @@ export default function Dashboard() {
     [detail, setDetail] = useState<Session | null>(null);
   const [query, setQuery] = useState(""),
     [kind, setKind] = useState("all"),
+    [participantFilter, setParticipantFilter] = useState("all"),
+    [task, setTask] = useState<"signal" | "compare" | null>(null),
+    [compareQuery, setCompareQuery] = useState(""),
+    [availability, setAvailability] = useState<Record<string, SignalKind[]>>(
+      {},
+    ),
+    [availabilityError, setAvailabilityError] = useState(""),
+    [selection, setSelection] = useState<Range | null>(null),
+    [dragMode, setDragMode] = useState<"select" | "zoom" | "pan">("select"),
     [email, setEmail] = useState("demo@apexvip.local"),
     [password, setPassword] = useState("apex-demo-2026"),
-    [form, setForm] = useState(JSON.stringify(defaultTemplate, null, 2));
+    [form, setForm] = useState(
+      JSON.stringify(
+        { ...defaultTemplate, version: defaultTemplate.version + 1 },
+        null,
+        2,
+      ),
+    );
   function remember(id: string, workspace = user?.workspace) {
     try {
       if (workspace) localStorage.setItem(`apex-layout:${workspace}`, id);
@@ -141,11 +132,17 @@ export default function Dashboard() {
     setSaved(ll);
     setTemplates(tt);
     if (ss.length) {
-      let active: string | null = null;
-      try {
-        active = localStorage.getItem(`apex-layout:${workspace}`);
-      } catch {}
-      const l = ll.find((l) => l.id === active) ?? ll[0] ?? initialLayout(ss);
+      const available = (
+        await api<{ signal: SignalKind; count: number }[]>(
+          `sessions/${ss[0].id}/signals`,
+        )
+      )
+        .filter((x) => x.count > 0)
+        .map((x) => x.signal);
+      const l = initialLayout(
+        [ss[0]],
+        available.includes("hr") ? "hr" : (available[0] ?? "hr"),
+      );
       setLayout(l);
       reset(l, ss);
     }
@@ -157,10 +154,38 @@ export default function Dashboard() {
         await load(u.workspace);
       })
       .catch((e) => {
-        if (e.message !== "Logga in för att fortsätta") setError(e.message);
+        if (e.message !== "Sign in to continue") setError(e.message);
       })
       .finally(() => setBoot(false));
   }, []);
+  useEffect(() => {
+    let active = true;
+    setAvailabilityError("");
+    Promise.all(
+      sessions.map(
+        async (s) =>
+          [
+            s.id,
+            (
+              await api<{ signal: SignalKind; count: number }[]>(
+                `sessions/${s.id}/signals`,
+              )
+            )
+              .filter((x) => x.count > 0)
+              .map((x) => x.signal),
+          ] as const,
+      ),
+    )
+      .then((rows) => {
+        if (active) setAvailability(Object.fromEntries(rows));
+      })
+      .catch((e) => {
+        if (active) setAvailabilityError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [sessions]);
   async function action(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -168,7 +193,7 @@ export default function Dashboard() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Åtgärden misslyckades");
+      setError(e instanceof Error ? e.message : "The action failed");
     } finally {
       setBusy(false);
     }
@@ -200,6 +225,7 @@ export default function Dashboard() {
       bounds.length ? [Math.min(...bounds), Math.max(...bounds)] : [0, 900000],
     );
     setCursor(null);
+    setSelection(null);
   }
   function change(l: Layout) {
     setLayout(l);
@@ -215,20 +241,80 @@ export default function Dashboard() {
       });
   }
   function open(l: Layout) {
-    remember(l.id);
     setLayout(structuredClone(l));
     setDirty(false);
-    setView("Analysyta");
+    setView("Analysis");
     reset(l);
     setEditor(null);
+    setEditing(false);
+    setTask(null);
+    setDetail(null);
   }
-  function compare(ss: Session[]) {
-    const l = initialLayout(ss);
-    l.id = crypto.randomUUID();
-    l.title = `Jämförelse · ${ss.map((s) => s.participantLabel).join(" / ")}`;
-    l.panels = [{ ...l.panels[1], width: 2, sessionIds: ss.map((s) => s.id) }];
+  async function compare(ss: Session[]) {
+    const first = ss[0];
+    let available = availability[first.id];
+    if (!available) {
+      try {
+        available = (
+          await api<{ signal: SignalKind; count: number }[]>(
+            `sessions/${first.id}/signals`,
+          )
+        )
+          .filter((x) => x.count > 0)
+          .map((x) => x.signal);
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Could not load available signals. Please try again.",
+        );
+        return;
+      }
+    }
+    const signal = available?.includes("hr") ? "hr" : (available?.[0] ?? "hr");
+    const l = initialLayout(ss, signal);
+    if (ss.length > 1) l.title = "Session comparison";
     open(l);
-    setDirty(true);
+    setDirty(false);
+    if (!available?.includes("hr"))
+      setNotice(
+        available?.length
+          ? `Heart rate is unavailable. Showing ${signals[signal].name}.`
+          : "No signals have been recorded yet. Sync data from the mobile app.",
+      );
+  }
+  function addSignal(signal: SignalKind, separate: boolean) {
+    if (!layout) return;
+    const first = layout.panels[0];
+    if (separate || first.signalKinds.length >= 2) {
+      change({
+        ...layout,
+        panels: [
+          ...layout.panels,
+          {
+            ...first,
+            id: crypto.randomUUID(),
+            title: signals[signal].name,
+            signalKinds: [signal],
+            axis: "shared",
+            color: signals[signal].color,
+            width: 2,
+            height: 380,
+          },
+        ],
+      });
+    } else {
+      const kinds = [...new Set([...first.signalKinds, signal])];
+      panelChange(first.id, {
+        signalKinds: kinds,
+        title: kinds.map((k) => signals[k].name).join(" & "),
+        axis:
+          new Set(kinds.map((k) => signals[k].unit)).size > 1
+            ? "separate"
+            : "shared",
+      });
+    }
+    setTask(null);
   }
   function move(id: string, delta: number) {
     if (!layout) return;
@@ -274,14 +360,14 @@ export default function Dashboard() {
         cursor = data.points[data.points.length - 1].cursor;
       }
       download(`${session.id}-raw.csv`, lines.join("\n"), "text/csv");
-      setNotice("Rådata exporterad utan normalisering eller förenkling.");
+      setNotice("Raw data exported without normalization or downsampling.");
     });
   }
   if (boot)
     return (
       <main className="login">
         <ActivityIcon size={34} />
-        <p>Öppnar arbetsyta…</p>
+        <p>Opening workspace…</p>
       </main>
     );
   if (!user)
@@ -291,14 +377,14 @@ export default function Dashboard() {
           <div className="brand">
             apex<span>VIP</span>
           </div>
-          <p className="eyebrow">MÄTNING · ANALYS · FORSKNING</p>
+          <p className="eyebrow">RECORDING · ANALYSIS · RESEARCH</p>
           <h1>
-            En arbetsyta för
+            One workspace for
             <br />
-            hela mätningen.
+            every session.
           </h1>
           <p>
-            Samla signaler, förstå sessioner och bygg dina egna analysupplägg.
+            Record signals, explore sessions and create your own analysis views.
           </p>
           <form
             onSubmit={(e) => {
@@ -307,7 +393,7 @@ export default function Dashboard() {
             }}
           >
             <label>
-              E-post
+              Email
               <input
                 type="email"
                 value={email}
@@ -317,7 +403,7 @@ export default function Dashboard() {
               />
             </label>
             <label>
-              Lösenord
+              Password
               <input
                 type="password"
                 value={password}
@@ -327,19 +413,19 @@ export default function Dashboard() {
               />
             </label>
             <button className="primary" disabled={busy}>
-              Logga in
+              Sign in
             </button>
             <button
               type="button"
               onClick={() => void signIn(true)}
               disabled={busy}
             >
-              Öppna demoprojekt <ArrowRightIcon />
+              Open demo workspace <ArrowRightIcon />
             </button>
           </form>
           <small>
-            Demokontot är förifyllt. Demoprojektet innehåller endast syntetiska
-            mätningar och använder samma API som riktiga sessioner.
+            The demo account is prefilled. All demo recordings are synthetic and
+            use the same API as sensor recordings.
           </small>
           {error && (
             <p role="alert" className="error">
@@ -351,18 +437,19 @@ export default function Dashboard() {
           <span>APEX / LAB 01</span>
           <ActivityIcon size={140} weight="thin" />
           <p>
-            Från mätpunkt
+            From recording
             <br />
-            till perspektiv.
+            to understanding.
           </p>
-          <small>Polar H10 · HR · RR · ECG · rörelse</small>
+          <small>Polar H10 · HR · RR · movement</small>
         </div>
       </main>
     );
   const filtered = sessions.filter(
     (s) =>
+      (participantFilter === "all" || s.participantId === participantFilter) &&
       (kind === "all" || (kind === "demo" ? s.demo : !s.demo)) &&
-      `${s.title} ${s.participantLabel} ${s.typeId}`
+      `${displayText(s.title)} ${displayText(s.title)} ${s.participantLabel} ${s.typeId}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -379,25 +466,9 @@ export default function Dashboard() {
         </div>
 
         <nav>
-          {nav.slice(0, 4).map(([v, Icon]) => (
-            <button
-              key={v}
-              className={view === v ? "active" : ""}
-              onClick={() => {
-                setView(v);
-                setDetail(null);
-              }}
-            >
-              <Icon size={19} />
-              {v}
-              {v === "Sessioner" && <small>{sessions.length}</small>}
-            </button>
-          ))}
-        </nav>
-        <details className="secondary-nav">
-          <summary>Fler verktyg</summary>
-          <nav>
-            {nav.slice(4).map(([v, Icon]) => (
+          {nav
+            .filter(([v]) => ["Overview", "Sessions", "Analysis"].includes(v))
+            .map(([v, Icon]) => (
               <button
                 key={v}
                 className={view === v ? "active" : ""}
@@ -408,13 +479,35 @@ export default function Dashboard() {
               >
                 <Icon size={19} />
                 {v}
+                {v === "Sessions" && <small>{sessions.length}</small>}
               </button>
             ))}
-          </nav>
-        </details>
+        </nav>
+        <nav className="secondary-nav" aria-label="Administration">
+          <button
+            className={view === "Participants" ? "active" : ""}
+            onClick={() => {
+              setView("Participants");
+              setDetail(null);
+            }}
+          >
+            <UsersIcon />
+            Participants
+          </button>
+          <button
+            className={view === "Settings" ? "active" : ""}
+            onClick={() => {
+              setView("Settings");
+              setDetail(null);
+            }}
+          >
+            <SlidersHorizontalIcon />
+            Settings
+          </button>
+        </nav>
         <div className="sidebar-bottom">
           <div className="status-dot" />
-          Din arbetsyta
+          Your workspace
           <button
             onClick={() =>
               void action(async () => {
@@ -426,20 +519,30 @@ export default function Dashboard() {
             }
           >
             <SignOutIcon />
-            Logga ut
+            Sign out
           </button>
         </div>
       </aside>
       <div className="main">
         <header className="topbar">
           <span>
-            Arbetsyta <span className="slash">/</span> <b>{view}</b>
+            Workspace <span className="slash">/</span> <b>{view}</b>
           </span>
           <div>
             <span className="badge">
-              {sessions.some((s) => s.demo)
-                ? "Demodata tillgängliga"
-                : "Inga demodata"}
+              {(() => {
+                const ss =
+                  view === "Analysis" && layout
+                    ? sessions.filter((s) =>
+                        layout.panels.some((p) => p.sessionIds.includes(s.id)),
+                      )
+                    : sessions;
+                return ss.length && ss.every((s) => s.demo)
+                  ? "Synthetic demo data"
+                  : ss.some((s) => s.demo)
+                    ? "Mixed demo & sensor data"
+                    : "Sensor data";
+              })()}
             </span>
             <span className="avatar">
               {user.email.slice(0, 2).toUpperCase()}
@@ -450,7 +553,7 @@ export default function Dashboard() {
           {error && (
             <div role="alert" className="alert error">
               {error}
-              <button aria-label="Stäng fel" onClick={() => setError("")}>
+              <button aria-label="Dismiss error" onClick={() => setError("")}>
                 <XIcon />
               </button>
             </div>
@@ -459,7 +562,7 @@ export default function Dashboard() {
             <div role="status" className="alert">
               {notice}
               <button
-                aria-label="Stäng meddelande"
+                aria-label="Dismiss message"
                 onClick={() => setNotice("")}
               >
                 <XIcon />
@@ -469,51 +572,38 @@ export default function Dashboard() {
           <div className="page-heading">
             <div>
               <h1>
-                {detail
-                  ? "Sessionsdetalj"
-                  : view === "Översikt"
-                    ? "Din översikt"
+                {detail && view === "Sessions"
+                  ? "Session details"
+                  : view === "Overview"
+                    ? "Your overview"
                     : view}
               </h1>
               <p>
-                {view === "Analysyta"
-                  ? "Utforska signaler och jämför sessioner på en gemensam tidslinje."
-                  : view === "Sessioner"
-                    ? "Mätningar, händelser och datakvalitet i samma flöde."
-                    : view === "Deltagare"
-                      ? "Pseudonyma identifierare håller fokus på mätningen."
-                      : view === "Konfiguration"
-                        ? "Versionerade sessionstyper, händelser och självskattningar."
-                        : view === "Översikt"
-                          ? "Senaste mätningarna, samlade på ett ställe."
-                          : "Din arbetsyta för fysiologiska mätningar."}
+                {view === "Analysis"
+                  ? "Explore a session, then add signals or comparisons when needed."
+                  : view === "Sessions"
+                    ? "Find a session by name or participant."
+                    : view === "Participants"
+                      ? "Participant records and their sessions."
+                      : view === "Settings"
+                        ? "Manage session types, events and questionnaires."
+                        : view === "Overview"
+                          ? "Pick up where you left off."
+                          : "Your workspace for recording and analysis."}
               </p>
             </div>
-            {view === "Analysyta" && layout && (
+            {view === "Analysis" && layout && (
               <div className="actions">
                 <button
+                  id="customize-analysis"
                   aria-expanded={editing}
                   onClick={() => {
                     setEditing(!editing);
-                    setEditor(null);
+                    setEditor(!editing ? (layout.panels[0]?.id ?? null) : null);
                   }}
                 >
                   <SlidersHorizontalIcon />
-                  {editing ? "Klar" : "Anpassa analys"}
-                </button>
-                <button
-                  hidden={!editing}
-                  onClick={() => {
-                    const l = {
-                      ...layout,
-                      id: crypto.randomUUID(),
-                      title: `${layout.title} · kopia`,
-                    };
-                    change(l);
-                    setNotice("Kopia skapad. Namnge och spara den.");
-                  }}
-                >
-                  Duplicera
+                  {editing ? "Done" : "Customize"}
                 </button>
                 <button
                   className="primary"
@@ -527,23 +617,23 @@ export default function Dashboard() {
                       ]);
                       setDirty(false);
                       remember(l.id);
-                      setNotice("Upplägget är sparat i din arbetsyta.");
+                      setNotice("View saved in your workspace.");
                     })
                   }
                 >
                   <FloppyDiskIcon />
-                  Spara upplägg
+                  Save view
                 </button>
               </div>
             )}
           </div>
-          {!sessions.length && view !== "Konfiguration" ? (
+          {!sessions.length && view !== "Settings" ? (
             <div className="empty large">
               <ActivityIcon size={40} />
-              <h2>Redo för första sessionen</h2>
+              <h2>Ready for your first session</h2>
               <p>
-                Synkronisera en mätning från mobilappen eller skapa syntetiska
-                sessioner genom API:t.
+                Sync a recording from the mobile app or load synthetic demo
+                sessions.
               </p>
               <button
                 className="primary"
@@ -555,43 +645,293 @@ export default function Dashboard() {
                   })
                 }
               >
-                Läs in demodata
+                Load demo data
               </button>
             </div>
           ) : (
             <>
-              {view === "Analysyta" && layout && (
+              {view === "Analysis" && layout && (
                 <>
+                  <section className="session-context">
+                    <div>
+                      {layout.panels[0]?.sessionIds.map((id) => {
+                        const s = sessions.find((x) => x.id === id);
+                        return s ? (
+                          <div key={id} className="session-context-row">
+                            <strong>{displayText(s.title)}</strong>
+                            <button
+                              className="participant-link"
+                              onClick={() => {
+                                setParticipantFilter(s.participantId);
+                                setView("Sessions");
+                              }}
+                            >
+                              {s.participantLabel}
+                            </button>
+                            <span>
+                              {new Date(s.startedAt).toLocaleDateString(
+                                "en-GB",
+                              )}{" "}
+                              · {Math.round(s.durationMs / 60000)} min
+                            </span>
+                            {s.demo && <span className="badge">Demo</span>}
+                            <button
+                              className="quiet-button"
+                              onClick={() =>
+                                setDetail(detail?.id === s.id ? null : s)
+                              }
+                            >
+                              Session details
+                            </button>
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                    <div className="task-actions">
+                      <button
+                        disabled={!layout.panels.length}
+                        aria-expanded={task === "signal"}
+                        onClick={() =>
+                          setTask(task === "signal" ? null : "signal")
+                        }
+                      >
+                        <PlusIcon />
+                        Add signal
+                      </button>
+                      <button
+                        disabled={!layout.panels.length}
+                        aria-expanded={task === "compare"}
+                        onClick={() =>
+                          setTask(task === "compare" ? null : "compare")
+                        }
+                      >
+                        <ChartLineIcon />
+                        Compare sessions
+                      </button>
+                      <details className="view-menu">
+                        <summary>View options</summary>
+                        <div>
+                          <label>
+                            View name
+                            <input
+                              aria-label="Saved view name"
+                              value={displayText(layout.title)}
+                              onChange={(e) =>
+                                change({ ...layout, title: e.target.value })
+                              }
+                            />
+                          </label>
+                          <select
+                            aria-label="Open saved view"
+                            value=""
+                            onChange={(e) => {
+                              const l = saved.find(
+                                (x) => x.id === e.target.value,
+                              );
+                              if (l) open(l);
+                            }}
+                          >
+                            <option value="">Open saved view…</option>
+                            {saved.map((l) => (
+                              <option key={l.id} value={l.id}>
+                                {displayText(l.title)}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => {
+                              change({
+                                ...layout,
+                                id: crypto.randomUUID(),
+                                title: displayText(layout.title) + " · copy",
+                              });
+                              setNotice("Copy created. Rename and save it.");
+                            }}
+                          >
+                            Duplicate view
+                          </button>
+                          <button
+                            onClick={() =>
+                              download(
+                                `${layout.id}.json`,
+                                JSON.stringify(
+                                  { layout, visibleInterval: range },
+                                  null,
+                                  2,
+                                ),
+                                "application/json",
+                              )
+                            }
+                          >
+                            Export view JSON
+                          </button>
+                          <button onClick={() => setView("Saved views")}>
+                            Manage saved views
+                          </button>
+                        </div>
+                      </details>
+                      {dirty && (
+                        <span className="unsaved" role="status">
+                          Unsaved changes
+                        </span>
+                      )}
+                    </div>
+                  </section>
+                  {detail && (
+                    <section className="inline-details">
+                      <SessionDetail
+                        session={detail}
+                        onBack={() => setDetail(null)}
+                        onAnalyze={() => setDetail(null)}
+                        onExport={() => void exportRaw(detail)}
+                        busy={busy}
+                      />
+                    </section>
+                  )}
+                  {task === "signal" && (
+                    <section className="task-picker" aria-label="Add signal">
+                      <h2>Add a signal</h2>
+                      <p>
+                        Choose the same chart for an overlay, or a separate
+                        chart.
+                      </p>
+                      {availabilityError ? (
+                        <p role="alert">
+                          {availabilityError} Retry by reopening this workspace.
+                        </p>
+                      ) : !availability[layout.panels[0]?.sessionIds[0]] ? (
+                        <p>Loading available signals…</p>
+                      ) : (
+                        availability[layout.panels[0]?.sessionIds[0]]
+                          .filter(
+                            (k) =>
+                              !layout.panels.some((p) =>
+                                p.signalKinds.includes(k),
+                              ),
+                          )
+                          .map((k) => (
+                            <div key={k}>
+                              <span>
+                                {signals[k].name}{" "}
+                                <small>{signals[k].unit}</small>
+                              </span>
+                              <button onClick={() => addSignal(k, false)}>
+                                Same chart
+                              </button>
+                              <button onClick={() => addSignal(k, true)}>
+                                Separate chart
+                              </button>
+                            </div>
+                          ))
+                      )}
+                      {availability[layout.panels[0]?.sessionIds[0]]?.every(
+                        (k) =>
+                          layout.panels.some((p) => p.signalKinds.includes(k)),
+                      ) && <p>All available signals are already shown.</p>}
+                      <button onClick={() => setTask(null)}>Close</button>
+                    </section>
+                  )}
+                  {task === "compare" && (
+                    <section
+                      className="task-picker"
+                      aria-label="Compare sessions"
+                    >
+                      <h2>Compare up to four sessions</h2>
+                      <input
+                        aria-label="Search comparison sessions"
+                        placeholder="Search session or participant…"
+                        value={compareQuery}
+                        onChange={(e) => setCompareQuery(e.target.value)}
+                      />
+                      {sessions
+                        .filter((s) =>
+                          `${displayText(s.title)} ${s.participantLabel}`
+                            .toLowerCase()
+                            .includes(compareQuery.toLowerCase()),
+                        )
+                        .map((s) => (
+                          <label className="compare-choice" key={s.id}>
+                            <input
+                              type="checkbox"
+                              checked={layout.panels[0].sessionIds.includes(
+                                s.id,
+                              )}
+                              disabled={
+                                !layout.panels[0].sessionIds.includes(s.id) &&
+                                layout.panels[0].sessionIds.length >= 4
+                              }
+                              onChange={(e) => {
+                                const ids = e.target.checked
+                                  ? [...layout.panels[0].sessionIds, s.id]
+                                  : layout.panels[0].sessionIds.filter(
+                                      (id) => id !== s.id,
+                                    );
+                                if (ids.length) {
+                                  const l = {
+                                    ...layout,
+                                    alignment: "elapsed" as const,
+                                    panels: layout.panels.map((p) => ({
+                                      ...p,
+                                      sessionIds: ids,
+                                    })),
+                                  };
+                                  change(l);
+                                  reset(l);
+                                }
+                              }}
+                            />
+                            <span>
+                              {s.participantLabel} · {displayText(s.title)}
+                              <small>
+                                {new Date(s.startedAt).toLocaleDateString(
+                                  "en-GB",
+                                )}{" "}
+                                · {Math.round(s.durationMs / 60000)} min
+                                {s.demo ? " · Demo" : ""}
+                              </small>
+                            </span>
+                          </label>
+                        ))}
+                      {!sessions.some((s) =>
+                        `${displayText(s.title)} ${s.participantLabel}`
+                          .toLowerCase()
+                          .includes(compareQuery.toLowerCase()),
+                      ) && <p>No matching sessions. Try another search.</p>}
+                      <button onClick={() => setTask(null)}>
+                        Done comparing
+                      </button>
+                    </section>
+                  )}
                   <div className="analysis-toolbar" hidden={!editing}>
                     <div>
                       <label className="sr-only" htmlFor="layout-name">
-                        Uppläggets namn
+                        View name
                       </label>
                       <input
                         id="layout-name"
                         className="layout-name"
-                        value={layout.title}
+                        value={displayText(layout.title)}
                         onChange={(e) =>
                           change({ ...layout, title: e.target.value })
                         }
                       />
                       <span className="subtle">
-                        {dirty ? "Osparat" : "Upplägg v1"}
+                        {dirty ? "Unsaved changes" : "Saved"}
                       </span>
                     </div>
                     <div>
                       <select
-                        aria-label="Öppna sparat upplägg"
+                        aria-label="Open saved view"
                         value=""
                         onChange={(e) => {
                           const l = saved.find((l) => l.id === e.target.value);
                           if (l) open(l);
                         }}
                       >
-                        <option value="">Öppna upplägg…</option>
+                        <option value="">Open a saved view…</option>
                         {saved.map((l) => (
                           <option key={l.id} value={l.id}>
-                            {l.title}
+                            {displayText(l.title)}
                           </option>
                         ))}
                       </select>
@@ -604,9 +944,14 @@ export default function Dashboard() {
                               ...layout.panels,
                               {
                                 id,
-                                title: "Ny panel",
+                                title: "New chart",
                                 sessionIds: [sessions[0].id],
-                                signalKinds: ["hr"],
+                                signalKinds: [
+                                  availability[sessions[0].id]?.includes("hr")
+                                    ? "hr"
+                                    : (availability[sessions[0].id]?.[0] ??
+                                      "hr"),
+                                ],
                                 axis: "shared",
                                 color: signals.hr.color,
                                 lineWidth: 1.8,
@@ -621,13 +966,27 @@ export default function Dashboard() {
                         }}
                       >
                         <PlusIcon />
-                        Lägg till panel
+                        Add chart
                       </button>
                     </div>
                   </div>
                   <div className="timeline-controls">
+                    <label className="gesture-mode">
+                      Drag to
+                      <select
+                        aria-label="Chart interaction"
+                        value={dragMode}
+                        onChange={(e) =>
+                          setDragMode(e.target.value as typeof dragMode)
+                        }
+                      >
+                        <option value="select">Select interval</option>
+                        <option value="zoom">Zoom</option>
+                        <option value="pan">Pan</option>
+                      </select>
+                    </label>
                     <label hidden={!editing}>
-                      Tidsjustering{" "}
+                      Time alignment{" "}
                       <select
                         value={layout.alignment}
                         onChange={(e) => {
@@ -639,20 +998,26 @@ export default function Dashboard() {
                           reset(l);
                         }}
                       >
-                        <option value="elapsed">Sedan sessionsstart</option>
-                        <option value="absolute">Absolut tid</option>
-                        <option value="event">Relativt händelse</option>
+                        <option value="elapsed">Session start</option>
+                        <option value="absolute">Absolute time</option>
+                        <option value="event">Align to event</option>
                       </select>
                     </label>
                     {editing && layout.alignment === "event" && (
                       <label>
-                        Händelse
+                        Event
                         <input
                           value={layout.anchorLabel}
                           onChange={(e) => {
                             const l = {
                               ...layout,
-                              anchorLabel: e.target.value,
+                              anchorLabel:
+                                sessions
+                                  .flatMap((s) => s.events)
+                                  .find(
+                                    (ev) =>
+                                      displayText(ev.label) === e.target.value,
+                                  )?.label ?? e.target.value,
                             };
                             change(l);
                             reset(l);
@@ -660,9 +1025,20 @@ export default function Dashboard() {
                         />
                       </label>
                     )}
+                    <datalist id="anchor-events">
+                      {[
+                        ...new Set(
+                          sessions.flatMap((s) => s.events.map((e) => e.label)),
+                        ),
+                      ].map((label) => (
+                        <option key={label} value={displayText(label)}>
+                          {displayText(label)}
+                        </option>
+                      ))}
+                    </datalist>
                     <div className="zoom-buttons">
                       <button
-                        aria-label="Panorera bakåt"
+                        aria-label="Pan left"
                         onClick={() => {
                           const d = (range[1] - range[0]) * 0.25;
                           setRange([range[0] - d, range[1] - d]);
@@ -671,7 +1047,7 @@ export default function Dashboard() {
                         <ArrowLeftIcon />
                       </button>
                       <button
-                        aria-label="Zooma in"
+                        aria-label="Zoom in"
                         onClick={() => {
                           const mid = (range[0] + range[1]) / 2,
                             d = (range[1] - range[0]) * 0.3;
@@ -681,7 +1057,7 @@ export default function Dashboard() {
                         +
                       </button>
                       <button
-                        aria-label="Zooma ut"
+                        aria-label="Zoom out"
                         onClick={() => {
                           const mid = (range[0] + range[1]) / 2,
                             d = (range[1] - range[0]) * 0.8;
@@ -691,7 +1067,7 @@ export default function Dashboard() {
                         −
                       </button>
                       <button
-                        aria-label="Panorera framåt"
+                        aria-label="Pan right"
                         onClick={() => {
                           const d = (range[1] - range[0]) * 0.25;
                           setRange([range[0] + d, range[1] + d]);
@@ -701,7 +1077,7 @@ export default function Dashboard() {
                       </button>
                       <button onClick={() => reset()}>
                         <ArrowsOutSimpleIcon />
-                        Hela passet
+                        Full session
                       </button>
                     </div>
                     <span className="time-range" data-testid="time-range">
@@ -712,19 +1088,25 @@ export default function Dashboard() {
                   <div className="analysis-caption">
                     <span>
                       <i className="status-dot" />
-                      Gemensam tidslinje
+                      Shared timeline
                     </span>
                     <span>
-                      Markör{" "}
+                      Cursor{" "}
                       {cursor === null
                         ? "—"
                         : timeLabel(
                             cursor,
                             layout.alignment === "absolute",
                           )}{" "}
-                      · Dra i diagrammet för att välja intervall
+                      · Drag to select an interval
                     </span>
                   </div>
+                  {!layout.panels.length && (
+                    <div className="empty">
+                      This saved view has no charts. Open Customize and choose
+                      Add chart.
+                    </div>
+                  )}
                   <div className="panel-grid">
                     {layout.panels.map((p, i) => (
                       <section
@@ -752,13 +1134,13 @@ export default function Dashboard() {
                             <span className="panel-number">
                               {String(i + 1).padStart(2, "0")}
                             </span>
-                            <h2>{p.title}</h2>
+                            <h2>{displayText(p.title)}</h2>
                           </div>
                           <div>
                             <button
                               hidden={!editing}
-                              title="Flytta upp"
-                              aria-label={`Flytta ${p.title} upp`}
+                              title="Move up"
+                              aria-label={`Move ${p.title} up`}
                               disabled={i === 0}
                               onClick={() => move(p.id, -1)}
                             >
@@ -766,15 +1148,15 @@ export default function Dashboard() {
                             </button>
                             <button
                               hidden={!editing}
-                              title="Flytta ner"
-                              aria-label={`Flytta ${p.title} ner`}
+                              title="Move down"
+                              aria-label={`Move ${p.title} down`}
                               disabled={i === layout.panels.length - 1}
                               onClick={() => move(p.id, 1)}
                             >
                               <ArrowDownIcon />
                             </button>
                             <button
-                              aria-label={`Inställningar ${p.title}`}
+                              aria-label={`Customize ${p.title}`}
                               className={editor === p.id ? "selected" : ""}
                               onClick={() => {
                                 setEditing(true);
@@ -786,18 +1168,76 @@ export default function Dashboard() {
                           </div>
                         </header>
                         {editor === p.id && (
-                          <div className="panel-editor">
+                          <div
+                            className="panel-editor"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Customize chart"
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                setEditor(null);
+                                setEditing(false);
+                                requestAnimationFrame(() =>
+                                  document
+                                    .getElementById("customize-analysis")
+                                    ?.focus(),
+                                );
+                              }
+                              if (e.key === "Tab") {
+                                const all = Array.from(
+                                  e.currentTarget.querySelectorAll<HTMLElement>(
+                                    "button:not(:disabled), input:not(:disabled), select:not(:disabled), summary",
+                                  ),
+                                ).filter(
+                                  (el) => el.getClientRects().length > 0,
+                                );
+                                const first = all[0],
+                                  last = all[all.length - 1];
+                                if (
+                                  e.shiftKey &&
+                                  document.activeElement === first
+                                ) {
+                                  e.preventDefault();
+                                  last?.focus();
+                                } else if (
+                                  !e.shiftKey &&
+                                  document.activeElement === last
+                                ) {
+                                  e.preventDefault();
+                                  first?.focus();
+                                }
+                              }
+                            }}
+                          >
+                            <div className="editor-heading">
+                              <h2>Customize chart</h2>
+                              <button
+                                autoFocus
+                                onClick={() => {
+                                  setEditor(null);
+                                  setEditing(false);
+                                  requestAnimationFrame(() =>
+                                    document
+                                      .getElementById("customize-analysis")
+                                      ?.focus(),
+                                  );
+                                }}
+                              >
+                                Close customization
+                              </button>
+                            </div>
                             <label>
-                              Panelnamn
+                              Chart name
                               <input
-                                value={p.title}
+                                value={displayText(p.title)}
                                 onChange={(e) =>
                                   panelChange(p.id, { title: e.target.value })
                                 }
                               />
                             </label>
                             <fieldset>
-                              <legend>Sessioner / deltagare</legend>
+                              <legend>Sessions / participants</legend>
                               {sessions.map((s) => (
                                 <label className="check" key={s.id}>
                                   <input
@@ -817,49 +1257,64 @@ export default function Dashboard() {
                                         panelChange(p.id, { sessionIds: ids });
                                     }}
                                   />
-                                  {s.participantLabel} · {s.title}{" "}
+                                  {s.participantLabel} · {displayText(s.title)}{" "}
                                   {s.demo ? "(demo)" : ""}
                                 </label>
                               ))}
                             </fieldset>
                             <fieldset>
-                              <legend>Signaler</legend>
-                              {Object.entries(signals).map(([key, s]) => (
-                                <label className="check" key={key}>
-                                  <input
-                                    type="checkbox"
-                                    checked={p.signalKinds.includes(
-                                      key as SignalKind,
-                                    )}
-                                    disabled={
-                                      !p.signalKinds.includes(
+                              <legend>Signals</legend>
+                              {Object.entries(signals)
+                                .filter(
+                                  ([key]) =>
+                                    p.signalKinds.includes(key as SignalKind) ||
+                                    p.sessionIds.some((id) =>
+                                      availability[id]?.includes(
                                         key as SignalKind,
-                                      ) && p.signalKinds.length >= 2
-                                    }
-                                    onChange={(e) => {
-                                      const kinds = e.target.checked
-                                        ? [...p.signalKinds, key as SignalKind]
-                                        : p.signalKinds.filter(
-                                            (k) => k !== key,
-                                          );
-                                      if (kinds.length)
-                                        panelChange(p.id, {
-                                          signalKinds: kinds,
-                                          axis:
-                                            new Set(
-                                              kinds.map((k) => signals[k].unit),
-                                            ).size > 1
-                                              ? "separate"
-                                              : "shared",
-                                        });
-                                    }}
-                                  />
-                                  {s.name} · {s.unit}
-                                </label>
-                              ))}
+                                      ),
+                                    ),
+                                )
+                                .map(([key, s]) => (
+                                  <label className="check" key={key}>
+                                    <input
+                                      type="checkbox"
+                                      checked={p.signalKinds.includes(
+                                        key as SignalKind,
+                                      )}
+                                      disabled={
+                                        !p.signalKinds.includes(
+                                          key as SignalKind,
+                                        ) && p.signalKinds.length >= 2
+                                      }
+                                      onChange={(e) => {
+                                        const kinds = e.target.checked
+                                          ? [
+                                              ...p.signalKinds,
+                                              key as SignalKind,
+                                            ]
+                                          : p.signalKinds.filter(
+                                              (k) => k !== key,
+                                            );
+                                        if (kinds.length)
+                                          panelChange(p.id, {
+                                            signalKinds: kinds,
+                                            axis:
+                                              new Set(
+                                                kinds.map(
+                                                  (k) => signals[k].unit,
+                                                ),
+                                              ).size > 1
+                                                ? "separate"
+                                                : "shared",
+                                          });
+                                      }}
+                                    />
+                                    {s.name} · {s.unit}
+                                  </label>
+                                ))}
                             </fieldset>
                             <label>
-                              Axlar
+                              Axes
                               <select
                                 value={p.axis}
                                 onChange={(e) =>
@@ -876,108 +1331,116 @@ export default function Dashboard() {
                                     ).size > 1
                                   }
                                 >
-                                  Gemensam enhet
+                                  Shared unit
                                 </option>
-                                <option value="separate">Separata axlar</option>
+                                <option value="separate">Separate axes</option>
                                 <option value="normalized">
-                                  Normaliserad (z)
+                                  Normalized (z)
                                 </option>
                               </select>
                             </label>
-                            <label>
-                              Färg · första serie
-                              <input
-                                type="color"
-                                value={p.color}
-                                onChange={(e) =>
-                                  panelChange(p.id, { color: e.target.value })
-                                }
-                              />
-                            </label>
-                            <label>
-                              Linjebredd
-                              <input
-                                type="range"
-                                min="1"
-                                max="5"
-                                step=".1"
-                                value={p.lineWidth}
-                                onChange={(e) =>
-                                  panelChange(p.id, {
-                                    lineWidth: Number(e.target.value),
-                                  })
-                                }
-                              />
-                            </label>
-                            <label>
-                              Transparens
-                              <input
-                                type="range"
-                                min=".15"
-                                max="1"
-                                step=".05"
-                                value={p.opacity}
-                                onChange={(e) =>
-                                  panelChange(p.id, {
-                                    opacity: Number(e.target.value),
-                                  })
-                                }
-                              />
-                            </label>
-                            <label>
-                              Bredd
-                              <select
-                                value={p.width}
-                                onChange={(e) =>
-                                  panelChange(p.id, {
-                                    width: Number(e.target.value) as 1 | 2,
-                                  })
-                                }
-                              >
-                                <option value="1">Halv</option>
-                                <option value="2">Hel</option>
-                              </select>
-                            </label>
-                            <label>
-                              Höjd
-                              <input
-                                type="range"
-                                min="220"
-                                max="650"
-                                value={p.height}
-                                onChange={(e) =>
-                                  panelChange(p.id, {
-                                    height: Number(e.target.value),
-                                  })
-                                }
-                              />
-                            </label>
-                            <label className="check">
-                              <input
-                                type="checkbox"
-                                checked={p.visible}
-                                onChange={(e) =>
-                                  panelChange(p.id, {
-                                    visible: e.target.checked,
-                                  })
-                                }
-                              />
-                              Visa panel
-                            </label>
-                            <button
-                              className="danger"
-                              onClick={() =>
-                                change({
-                                  ...layout,
-                                  panels: layout.panels.filter(
-                                    (x) => x.id !== p.id,
-                                  ),
-                                })
-                              }
-                            >
-                              <XIcon />
-                              Ta bort panel
-                            </button>
+                            <details className="advanced-chart-options">
+                              <summary>Style and layout</summary>
+                              <div>
+                                <label>
+                                  Color · first series
+                                  <input
+                                    type="color"
+                                    value={p.color}
+                                    onChange={(e) =>
+                                      panelChange(p.id, {
+                                        color: e.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Line width
+                                  <input
+                                    type="range"
+                                    min="1"
+                                    max="5"
+                                    step=".1"
+                                    value={p.lineWidth}
+                                    onChange={(e) =>
+                                      panelChange(p.id, {
+                                        lineWidth: Number(e.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Opacity
+                                  <input
+                                    type="range"
+                                    min=".15"
+                                    max="1"
+                                    step=".05"
+                                    value={p.opacity}
+                                    onChange={(e) =>
+                                      panelChange(p.id, {
+                                        opacity: Number(e.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Width
+                                  <select
+                                    value={p.width}
+                                    onChange={(e) =>
+                                      panelChange(p.id, {
+                                        width: Number(e.target.value) as 1 | 2,
+                                      })
+                                    }
+                                  >
+                                    <option value="1">Half</option>
+                                    <option value="2">Full</option>
+                                  </select>
+                                </label>
+                                <label>
+                                  Height
+                                  <input
+                                    type="range"
+                                    min="220"
+                                    max="650"
+                                    value={p.height}
+                                    onChange={(e) =>
+                                      panelChange(p.id, {
+                                        height: Number(e.target.value),
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label className="check">
+                                  <input
+                                    type="checkbox"
+                                    checked={p.visible}
+                                    onChange={(e) =>
+                                      panelChange(p.id, {
+                                        visible: e.target.checked,
+                                      })
+                                    }
+                                  />
+                                  Show chart
+                                </label>
+                                <button
+                                  className="danger"
+                                  disabled={layout.panels.length <= 1}
+                                  onClick={() =>
+                                    change({
+                                      ...layout,
+                                      panels: layout.panels.filter(
+                                        (x) => x.id !== p.id,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  <XIcon />
+                                  Remove chart
+                                </button>
+                              </div>
+                            </details>
                           </div>
                         )}
                         <Chart
@@ -988,16 +1451,20 @@ export default function Dashboard() {
                           cursor={cursor}
                           onCursor={setCursor}
                           onRange={setRange}
+                          selection={selection}
+                          onSelect={setSelection}
+                          dragMode={dragMode}
                         />
                       </section>
                     ))}
                   </div>
                   <details className="analysis-help">
-                    <summary>Om datan och export</summary>
+                    <summary>Data and export</summary>
                     <div className="analysis-foot">
                       <p>
-                        Statistik för synligt intervall beräknas från giltiga
-                        råsamples. Skrafferade områden visar dataluckor.
+                        Statistics use valid raw samples in the displayed
+                        interval. Shaded areas indicate missing or uncertain
+                        data.
                       </p>
                       <button
                         onClick={() =>
@@ -1017,13 +1484,13 @@ export default function Dashboard() {
                         }
                       >
                         <DownloadSimpleIcon />
-                        Exportera analyskonfiguration
+                        Export view JSON
                       </button>
                     </div>
                   </details>
                 </>
               )}
-              {view === "Sessioner" && (
+              {view === "Sessions" && (
                 <>
                   {detail ? (
                     <SessionDetail
@@ -1037,32 +1504,72 @@ export default function Dashboard() {
                     <>
                       <div className="list-toolbar">
                         <input
-                          aria-label="Sök sessioner"
-                          placeholder="Sök deltagare, session eller typ…"
+                          aria-label="Search sessions"
+                          placeholder="Search participant, session or type…"
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
                         />
                         <select
-                          aria-label="Datakälla"
-                          value={kind}
-                          onChange={(e) => setKind(e.target.value)}
+                          aria-label="Participant filter"
+                          value={participantFilter}
+                          onChange={(e) => setParticipantFilter(e.target.value)}
                         >
-                          <option value="all">Alla källor</option>
-                          <option value="demo">Demodata</option>
-                          <option value="real">Riktiga mätningar</option>
+                          <option value="all">All participants</option>
+                          {participants.map((id) => (
+                            <option key={id} value={id}>
+                              {id}
+                            </option>
+                          ))}
                         </select>
-                        <span>{filtered.length} sessioner</span>
+                        <details className="filter-menu">
+                          <summary>Filters</summary>
+                          <label>
+                            Data source
+                            <select
+                              aria-label="Data source"
+                              value={kind}
+                              onChange={(e) => setKind(e.target.value)}
+                            >
+                              <option value="all">All sources</option>
+                              <option value="demo">Demo data</option>
+                              <option value="real">Sensor recordings</option>
+                            </select>
+                          </label>
+                        </details>
+                        <span>{filtered.length} sessions</span>
                       </div>
+                      {(query ||
+                        kind !== "all" ||
+                        participantFilter !== "all") && (
+                        <div className="active-filters">
+                          <span>
+                            {query && `Search: ${query} · `}
+                            {participantFilter !== "all" &&
+                              `Participant: ${participantFilter} · `}
+                            {kind !== "all" && `Source: ${kind}`}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setQuery("");
+                              setKind("all");
+                              setParticipantFilter("all");
+                            }}
+                          >
+                            Clear filters
+                          </button>
+                        </div>
+                      )}
                       <SessionTable
                         sessions={filtered}
-                        onOpen={setDetail}
+                        onOpen={(s) => compare([s])}
                         onAnalyze={(s) => compare([s])}
+                        onParticipant={(id) => setParticipantFilter(id)}
                       />
                     </>
                   )}
                 </>
               )}
-              {view === "Deltagare" && (
+              {view === "Participants" && (
                 <div className="participant-list">
                   {participants.map((id) => {
                     const ss = sessions.filter((s) => s.participantId === id);
@@ -1074,7 +1581,7 @@ export default function Dashboard() {
                         <div>
                           <h2>{ss[0].participantLabel}</h2>
                           <small>
-                            {ss.length} sessioner ·{" "}
+                            {ss.length} sessions ·{" "}
                             {Math.round(
                               ss.reduce((a, s) => a + s.durationMs, 0) / 60000,
                             )}{" "}
@@ -1082,21 +1589,21 @@ export default function Dashboard() {
                           </small>
                         </div>
                         <button onClick={() => compare(ss.slice(0, 4))}>
-                          Jämför sessioner <ArrowRightIcon />
+                          Compare sessions <ArrowRightIcon />
                         </button>
                       </article>
                     );
                   })}
                 </div>
               )}
-              {view === "Översikt" && (
+              {view === "Overview" && (
                 <>
-                  <div className="overview-summary" aria-label="Sammanfattning">
+                  <div className="overview-summary" aria-label="Summary">
                     <span>
-                      <strong>{sessions.length}</strong> sessioner
+                      <strong>{sessions.length}</strong> sessions
                     </span>
                     <span>
-                      <strong>{participants.length}</strong> deltagare
+                      <strong>{participants.length}</strong> participants
                     </span>
                     <span>
                       <strong>
@@ -1105,17 +1612,17 @@ export default function Dashboard() {
                             60000,
                         )}
                       </strong>{" "}
-                      min mättid
+                      min recorded
                     </span>
                   </div>
                   <section className="overview-sessions">
                     <div className="section-title">
-                      <h2>Senaste sessioner</h2>
+                      <h2>Recent sessions</h2>
                       <button
                         className="quiet-button"
-                        onClick={() => setView("Sessioner")}
+                        onClick={() => setView("Sessions")}
                       >
-                        Visa alla <ArrowRightIcon />
+                        View all <ArrowRightIcon />
                       </button>
                     </div>
                     <div className="recent-list">
@@ -1124,37 +1631,26 @@ export default function Dashboard() {
                         .slice(0, 4)
                         .map((s) => (
                           <article key={s.id}>
-                            <div className="recent-participant">
-                              {s.participantLabel}
-                            </div>
-                            <div className="recent-info">
-                              <button
-                                className="text-button"
-                                onClick={() => {
-                                  setDetail(s);
-                                  setView("Sessioner");
-                                }}
-                              >
-                                {s.title}
-                              </button>
-                              <p>
-                                {new Date(s.startedAt).toLocaleDateString(
-                                  "sv-SE",
-                                  { day: "numeric", month: "short" },
-                                )}{" "}
-                                · {Math.round(s.durationMs / 60000)} min
-                                {s.demo ? " · Demo" : ""}
-                              </p>
-                            </div>
-                            <span className="recent-state">
-                              {s.state === "ended" ? "Avslutad" : "Pågår"}
-                            </span>
                             <button
-                              className="quiet-button"
-                              aria-label={`Analysera ${s.title}`}
+                              className="recent-session-button"
                               onClick={() => compare([s])}
                             >
-                              Analysera <ArrowRightIcon />
+                              <span className="recent-participant">
+                                {s.participantLabel}
+                              </span>
+                              <span className="recent-info">
+                                <strong>{displayText(s.title)}</strong>
+                                <small>
+                                  {new Date(s.startedAt).toLocaleDateString(
+                                    "en-GB",
+                                    { day: "numeric", month: "short" },
+                                  )}{" "}
+                                  · {Math.round(s.durationMs / 60000)} min
+                                  {s.demo ? " · Demo" : ""}
+                                </small>
+                              </span>
+                              {s.state !== "ended" && <span>Recording</span>}
+                              <ArrowRightIcon />
                             </button>
                           </article>
                         ))}
@@ -1162,63 +1658,69 @@ export default function Dashboard() {
                   </section>
                   <section className="overview-next">
                     <div>
-                      <h2>Se mönstret över tid</h2>
-                      <p>Öppna din analys för att jämföra mätningar.</p>
+                      <h2>Explore patterns over time</h2>
+                      <p>Open analysis to compare your recordings.</p>
                     </div>
                     <button
                       className="primary"
-                      onClick={() => setView("Analysyta")}
+                      onClick={() => setView("Analysis")}
                     >
-                      Öppna analys <ArrowRightIcon />
+                      Open analysis <ArrowRightIcon />
                     </button>
                   </section>
                 </>
               )}
-              {view === "Upplägg" && (
+              {view === "Saved views" && (
                 <div className="saved-list">
                   {saved.length ? (
                     saved.map((l) => (
                       <article key={l.id}>
                         <BookmarkSimpleIcon size={26} />
                         <div>
-                          <h2>{l.title}</h2>
+                          <h2>{displayText(l.title)}</h2>
                           <p>
-                            {l.panels.length} paneler · schema v{l.version} ·{" "}
+                            {l.panels.length} charts · schema v{l.version} ·{" "}
                             {l.alignment}
                           </p>
                         </div>
                         <button onClick={() => open(l)}>
-                          Öppna <ArrowRightIcon />
+                          Open <ArrowRightIcon />
                         </button>
                         <button
                           onClick={() => {
                             const copy = {
                               ...l,
                               id: crypto.randomUUID(),
-                              title: l.title + " · kopia",
+                              title: l.title + " · copy",
                             };
                             open(copy);
                             setDirty(true);
                           }}
                         >
-                          Duplicera
+                          Duplicate
                         </button>
                       </article>
                     ))
                   ) : (
                     <div className="empty">
-                      Spara ditt första upplägg från analysytan.
+                      Save your first view from Analysis.
                     </div>
                   )}
                 </div>
               )}
-              {view === "Konfiguration" && (
+              {view === "Settings" && (
                 <div className="config-grid">
                   <section className="panel config-panel">
-                    <h2>Sessionstyper & formulär</h2>
+                    <h2>Session types & questionnaires</h2>
+                    <button
+                      className="quiet-button"
+                      onClick={() => setView("Saved views")}
+                    >
+                      Manage saved views
+                    </button>
                     <p>
-                      Äldre versioner är låsta. Ändra definitionen och öka
-                      versionen för att bevara betydelsen hos tidigare svar.
+                      Previous versions are immutable. Create a new version to
+                      preserve the meaning of recorded answers.
                     </p>
                     {templates.map((t) => (
                       <button
@@ -1234,24 +1736,16 @@ export default function Dashboard() {
                           )
                         }
                       >
-                        <span>{t.title}</span>
+                        <span>{displayText(t.title)}</span>
                         <span>
-                          v{t.version} · Skapa nästa version <ArrowRightIcon />
+                          v{t.version} · Create next version <ArrowRightIcon />
                         </span>
                       </button>
                     ))}
                   </section>
                   <section className="panel config-panel">
-                    <h2>Definition · JSON</h2>
-                    <label className="sr-only" htmlFor="template-json">
-                      Formulärdefinition
-                    </label>
-                    <textarea
-                      id="template-json"
-                      value={form}
-                      onChange={(e) => setForm(e.target.value)}
-                      spellCheck={false}
-                    />
+                    <h2>Edit questionnaire</h2>
+                    <QuestionnaireEditor value={form} onChange={setForm} />
                     <button
                       className="primary"
                       disabled={busy}
@@ -1268,12 +1762,12 @@ export default function Dashboard() {
                             ),
                           ]);
                           setNotice(
-                            `Definition ${t.title} v${t.version} sparad.`,
+                            `Definition ${displayText(t.title)} v${t.version} saved.`,
                           );
                         })
                       }
                     >
-                      Spara formulärversion
+                      Save questionnaire version
                     </button>
                   </section>
                 </div>
@@ -1282,8 +1776,8 @@ export default function Dashboard() {
           )}
         </main>
         <footer className="app-footer">
-          <span>apexVIP · Forskningsplattform</span>
-          <span>Din data, din arbetsyta</span>
+          <span>apexVIP · Analysis workspace</span>
+          <span>Your data, your workspace</span>
         </footer>
       </div>
     </div>
@@ -1293,20 +1787,22 @@ function SessionTable({
   sessions,
   onOpen,
   onAnalyze,
+  onParticipant,
 }: {
   sessions: Session[];
   onOpen: (s: Session) => void;
   onAnalyze: (s: Session) => void;
+  onParticipant?: (id: string) => void;
 }) {
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
-            <th>Session / deltagare</th>
+            <th>Session / participant</th>
             <th>Start</th>
-            <th>Längd</th>
-            <th>Källa</th>
+            <th>Duration</th>
+            <th>Source</th>
             <th>Status</th>
             <th />
           </tr>
@@ -1316,12 +1812,17 @@ function SessionTable({
             <tr key={s.id}>
               <td>
                 <button className="text-button" onClick={() => onOpen(s)}>
-                  {s.title}
+                  {displayText(s.title)}
                 </button>
-                <small>{s.participantLabel}</small>
+                <button
+                  className="participant-link"
+                  onClick={() => onParticipant?.(s.participantId)}
+                >
+                  {s.participantLabel}
+                </button>
               </td>
               <td>
-                {new Date(s.startedAt).toLocaleString("sv-SE", {
+                {new Date(s.startedAt).toLocaleString("en-GB", {
                   dateStyle: "short",
                   timeStyle: "short",
                 })}
@@ -1329,25 +1830,26 @@ function SessionTable({
               <td>{timeLabel(s.durationMs)}</td>
               <td>
                 <span className="badge">
-                  {s.demo ? "Syntetisk / demo" : "Sensor"}
+                  {s.demo ? "Synthetic / demo" : "Sensor"}
                 </span>
               </td>
               <td>
                 <span className="state">
-                  {s.state === "ended" ? "Avslutad" : "Pågår"}
+                  {s.state === "ended" ? "Ended" : "Recording"}
                 </span>
               </td>
               <td>
-                <button onClick={() => onAnalyze(s)}>
-                  Analysera <ArrowRightIcon />
-                </button>
+                <ArrowRightIcon aria-hidden="true" />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       {!sessions.length && (
-        <div className="empty">Inga sessioner matchar filtret.</div>
+        <div className="empty">
+          No sessions match these filters. Clear the filters or try another
+          search.
+        </div>
       )}
     </div>
   );
@@ -1393,78 +1895,73 @@ function SessionDetail({
     <>
       <button onClick={onBack}>
         <ArrowLeftIcon />
-        Sessionslista
+        Back to sessions
       </button>
       <div className="detail-heading">
-        <h2>{s.title}</h2>
+        <h2>{displayText(s.title)}</h2>
         <span className="badge">
-          {s.demo ? "DEMODATA · SYNTHETIC-V1" : "SENSORMÄTNING"}
+          {s.demo ? "SYNTHETIC DEMO DATA" : "SENSOR RECORDING"}
         </span>
         <button className="primary" onClick={onAnalyze}>
-          Öppna i analysytan
+          Open analysis
         </button>
         <button disabled={busy} onClick={onExport}>
           <DownloadSimpleIcon />
-          Exportera rådata
+          Export raw CSV
         </button>
       </div>
-      <dl className="metadata">
-        <div>
-          <dt>Deltagare</dt>
-          <dd>{s.participantLabel}</dd>
+      <p className="detail-summary">
+        {s.participantLabel} · {new Date(s.startedAt).toLocaleString("en-GB")} ·{" "}
+        {timeLabel(s.durationMs)} ·{" "}
+        {s.state === "ended" ? "Ended" : "Recording"}
+      </p>
+      <details className="technical-details">
+        <summary>Technical details & data quality</summary>
+        <dl className="metadata">
+          <div>
+            <dt>Source</dt>
+            <dd>{s.source}</dd>
+          </div>
+          <div>
+            <dt>Time policy</dt>
+            <dd>{s.timePolicy}</dd>
+          </div>
+          <div>
+            <dt>Session type</dt>
+            <dd>
+              {s.typeId} v{s.typeVersion}
+            </dd>
+          </div>
+        </dl>
+        {qualityError && <p role="alert">{qualityError}</p>}
+        <div className="quality-grid">
+          {quality
+            .filter((q) => q.count > 0)
+            .map((q) => (
+              <div key={q.signal}>
+                <h3>{signals[q.signal as SignalKind].name}</h3>
+                <strong>{q.count.toLocaleString("en-GB")}</strong>
+                <p>raw samples · {q.gaps} recorded gaps</p>
+                <small>Signal ID: {q.signal}</small>
+              </div>
+            ))}
         </div>
-        <div>
-          <dt>Källa</dt>
-          <dd>{s.source}</dd>
-        </div>
-        <div>
-          <dt>Tidspolicy</dt>
-          <dd>{s.timePolicy}</dd>
-        </div>
-        <div>
-          <dt>Sessionsupplägg</dt>
-          <dd>
-            {s.typeId} v{s.typeVersion}
-          </dd>
-        </div>
-        <div>
-          <dt>Längd</dt>
-          <dd>{timeLabel(s.durationMs)}</dd>
-        </div>
-        <div>
-          <dt>Tillstånd</dt>
-          <dd>{s.state}</dd>
-        </div>
-      </dl>
-      <h2 className="section-heading">Datakvalitet</h2>
-      {qualityError && (
-        <p role="alert" className="error">
-          {qualityError}
-        </p>
-      )}
-      <div className="quality-grid">
-        {quality
-          .filter((q) => q.count > 0)
-          .map((q) => (
-            <div key={q.signal}>
-              <h3>{signals[q.signal as SignalKind].name}</h3>
-              <strong>{q.count.toLocaleString("sv-SE")}</strong>
-              <p>råsamples · {q.gaps} registrerade luckor</p>
-            </div>
-          ))}
-      </div>
-      <h2 className="section-heading">Händelser & självskattningar</h2>
+      </details>
+      <h2 className="section-heading">Events & self-reports</h2>
       <div className="event-list">
         {s.events.map((e) => (
           <div key={e.id}>
             <span>{timeLabel(e.t)}</span>
             <strong>
-              {e.label} {e.value !== undefined && `· ${e.value}`}
+              {displayText(e.label)} {e.value !== undefined && `· ${e.value}`}
             </strong>
-            <small>
-              {e.type}
-              {e.formId && ` · ${e.formId} v${e.formVersion}`}
-            </small>
+            <details>
+              <summary>Technical details</summary>
+              <small>
+                {e.type}
+                {e.formId && ` · ${e.formId} v${e.formVersion}`}
+              </small>
+            </details>
           </div>
         ))}
       </div>

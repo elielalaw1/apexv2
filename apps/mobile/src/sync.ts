@@ -19,8 +19,7 @@ export async function request<T>(
       signal: controller.signal,
     });
     const data = await r.json();
-    if (!r.ok)
-      throw Error(`${r.status}: ${data.error ?? "Överföringen misslyckades"}`);
+    if (!r.ok) throw Error(`${r.status}: ${data.error ?? "Upload failed"}`);
     return data;
   } finally {
     clearTimeout(timer);
@@ -33,7 +32,7 @@ export async function synchronize(
   workspace: string,
   onProgress: (n: number) => void,
 ) {
-  if (syncing) throw Error("Synkronisering pågår redan");
+  if (syncing) throw Error("Sync is already in progress");
   syncing = true;
   try {
     const definitions = await localTemplates(workspace);
@@ -49,7 +48,7 @@ export async function synchronize(
               t.version === batch.session.typeVersion,
           );
           if (!template)
-            throw Error("Sessionens lokala formulärdefinition saknas");
+            throw Error("Local questionnaire definition is missing");
           await request(server, "templates", template, token);
           registered.add(key);
         }

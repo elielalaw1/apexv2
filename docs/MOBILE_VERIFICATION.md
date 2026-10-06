@@ -2,7 +2,7 @@
 
 ## Genomfört på iOS-simulator — 6 oktober 2026
 
-Native bygget inklusive Polar-bryggan kompilerade. `MobileUITests.swift` kördes på iPhone 17/iOS 26.5 med Xcode: ett godkänt test, inga fel. Testet skapade ett syntetiskt pass, kontrollerade 120 lokala samples och väntande utkorg, avslutade och återstartade appen, kontrollerade att utkorgen fanns kvar, synkroniserade och verifierade serverkvittens. Utloggning kontrollerades också. Separat API-kontroll hittade två sådana testpass med exakt 60 HR + 60 RR per pass. [Skärmbild](mobile-ios-simulator.png).
+Native bygget inklusive Polar-bryggan kompilerade. `MobileUITests.swift` kördes på iPhone 17/iOS 26.5 med Xcode: ett godkänt test, inga fel. Testet skapade ett syntetiskt pass, kontrollerade 120 lokala samples och väntande utkorg, avslutade och återstartade appen, kontrollerade att utkorgen fanns kvar, synkroniserade och verifierade serverkvittens. Utloggning kontrollerades också. Engelska gränssnittet verifierades också i en ny XCTest-körning. Separat API-kontroll hittade tre sådana testpass med exakt 60 HR + 60 RR per pass. [Skärmbild](mobile-ios-simulator.png).
 
 Detta verifierar Expo SQLite, SecureStore, återstart och överföring. Det verifierar inte fysisk H10 eller bakgrundsinsamlingsförmåga.
 

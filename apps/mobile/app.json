@@ -11,11 +11,11 @@
       "bundleIdentifier": "se.apex.vip",
       "supportsTablet": true,
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "apexVIP ansluter till din Polar H10 f\u00f6r puls och RR.",
+        "NSBluetoothAlwaysUsageDescription": "apexVIP connects to your Polar H10 to record heart rate and RR intervals.",
         "UIBackgroundModes": [
           "bluetooth-central"
         ],
-        "NSLocalNetworkUsageDescription": "Anslut till din lokala apexVIP-server f\u00f6r utveckling."
+        "NSLocalNetworkUsageDescription": "Connect to your local apexVIP development server."
       }
     },
     "android": {

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { displayText } from "@/core/presentation";
 import { Panel, Series, Session, Layout, signals } from "@/core/contract";
 export type Range = [number, number];
 export function offset(session: Session, layout: Layout) {
@@ -11,7 +12,7 @@ export function offset(session: Session, layout: Layout) {
 }
 export function timeLabel(t: number, absolute = false) {
   if (absolute)
-    return new Date(t).toLocaleTimeString("sv-SE", {
+    return new Date(t).toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -28,7 +29,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await r.json();
-  if (!r.ok) throw Error(data.error || "Begäran misslyckades");
+  if (!r.ok) throw Error(data.error || "The request failed");
   return data;
 }
 export default function Chart({
@@ -39,6 +40,9 @@ export default function Chart({
   cursor,
   onCursor,
   onRange,
+  selection,
+  onSelect,
+  dragMode,
 }: {
   panel: Panel;
   sessions: Session[];
@@ -47,12 +51,21 @@ export default function Chart({
   cursor: number | null;
   onCursor: (t: number) => void;
   onRange: (r: Range) => void;
+  selection: Range | null;
+  onSelect: (r: Range | null) => void;
+  dragMode: "select" | "zoom" | "pan";
 }) {
   const [result, setResult] = useState<{ signature: string; series: Series[] }>(
       { signature: "", series: [] },
     ),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(false);
+  const [eventDetail, setEventDetail] = useState<string | null>(null);
+  const [selectedStats, setSelectedStats] = useState<{
+    key: string;
+    series: Series[];
+  }>({ key: "", series: [] });
+  const [statsError, setStatsError] = useState("");
   const start = useRef<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [chartWidth, setChartWidth] = useState(900);
@@ -112,6 +125,39 @@ export default function Chart({
       active = false;
     };
   }, [signature]); // scalar signature prevents redundant requests on shared cursor moves
+  const statsKey = JSON.stringify([
+    selection,
+    panel.sessionIds,
+    panel.signalKinds,
+    layout.alignment,
+    layout.anchorLabel,
+  ]);
+  useEffect(() => {
+    let active = true;
+    setStatsError("");
+    if (!selection) return;
+    Promise.all(
+      picked.flatMap((session) =>
+        panel.signalKinds.map((signal) => {
+          const o = offset(session, layout),
+            from = Math.max(0, selection[0] - o),
+            to = Math.max(from, Math.min(session.durationMs, selection[1] - o));
+          return api<Series>(
+            `sessions/${session.id}/series?signal=${signal}&from=${from}&to=${to}`,
+          );
+        }),
+      ),
+    )
+      .then((data) => {
+        if (active) setSelectedStats({ key: statsKey, series: data });
+      })
+      .catch((e) => {
+        if (active) setStatsError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [statsKey]);
   const width = chartWidth,
     left = 48,
     right = panel.axis === "separate" ? 72 : 24,
@@ -147,8 +193,32 @@ export default function Chart({
     const [lo, hi] = domains[i] ?? [0, 1];
     return top + h - ((v - lo) / (hi - lo)) * h;
   };
-  const color = (i: number) =>
-    i === 0 ? panel.color : signals[series[i].signal].color;
+  const color = (i: number) => {
+    const signal = series[i].signal;
+    const ids = panel.sessionIds;
+    const sessionIndex = ids.indexOf(series[i].sessionId);
+    if (sessionIndex <= 0)
+      return signal === panel.signalKinds[0]
+        ? panel.color
+        : signals[signal].color;
+    const variants: Record<string, string[]> = {
+      hr: [panel.color, "#4a7097", "#706bb0", "#687149"],
+      rr: [signals.rr.color, "#b28954", "#6f562e", "#a65539"],
+      phoneacc: [signals.phoneacc.color, "#845a8f", "#b28456", "#617e70"],
+    };
+    return (variants[signal] ?? [
+      signals[signal].color,
+      "#4a7097",
+      "#9b6b32",
+      "#706bb0",
+    ])[sessionIndex % 4];
+  };
+  const sessionLabel = (id: string) => {
+    const s = picked.find((p) => p.id === id);
+    return s
+      ? `${s.participantLabel} · ${displayText(s.title)} · ${new Date(s.startedAt).toLocaleDateString("en-GB")}${s.demo ? " · Demo" : ""}`
+      : "";
+  };
   const pointer = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const style = getComputedStyle(e.currentTarget);
@@ -174,15 +244,15 @@ export default function Chart({
   if (!panel.visible)
     return (
       <div className="hidden-panel">
-        Panelen är dold. Öppna inställningar för att visa den.
+        This chart is hidden. Open Customize to show it.
       </div>
     );
   if (missing.length)
     return (
       <div className="empty">
-        Händelsen ”{layout.anchorLabel}” saknas i{" "}
-        {missing.map((s) => s.participantLabel).join(", ")}. Välj en annan
-        händelse eller tidsjustering.
+        The event “{displayText(layout.anchorLabel)}” is missing in{" "}
+        {missing.map((s) => s.participantLabel).join(", ")}. Choose another
+        event or time alignment.
       </div>
     );
   return (
@@ -190,20 +260,31 @@ export default function Chart({
       <div className="legend">
         {series.map((s, i) => (
           <span key={`${s.sessionId}-${s.signal}`}>
-            <i style={{ background: color(i) }} />
-            {picked.find((p) => p.id === s.sessionId)?.participantLabel}
-            {picked.find((p) => p.id === s.sessionId)?.demo
-              ? " (demo)"
-              : ""} · {signals[s.signal].name}{" "}
+            <i
+              style={{
+                background: "transparent",
+                borderBottom: `2px ${i >= panel.signalKinds.length ? "dashed" : "solid"} ${color(i)}`,
+              }}
+            />
+            {sessionLabel(s.sessionId)} · {signals[s.signal].name}{" "}
             <b>
               {panel.axis === "normalized"
-                ? "z (normaliserad)"
+                ? "z (normalized)"
                 : signals[s.signal].unit}
             </b>
           </span>
         ))}
-        {loading && <small>Hämtar…</small>}
+        {loading && <small>Loading…</small>}
       </div>
+      {!loading &&
+        !error &&
+        series.length > 0 &&
+        series.every((s) => s.rawCount === 0) && (
+          <p className="chart-warning">
+            No data in this interval. Return to Full session or choose another
+            signal.
+          </p>
+        )}
       {error ? (
         <div role="alert" className="empty">
           {error}
@@ -212,8 +293,8 @@ export default function Chart({
         <svg
           ref={svgRef}
           className="chart"
-          role="img"
-          aria-label={`${panel.title}. Dra för intervall, plus och minus för zoom, piltangenter för panorering.`}
+          role="group"
+          aria-label={`${panel.title}. Drag to select an interval, plus and minus to zoom, arrow keys to pan.`}
           tabIndex={0}
           viewBox={`0 0 ${width} ${h + top + bottom}`}
           onPointerMove={(e) => onCursor(pointer(e))}
@@ -223,17 +304,39 @@ export default function Chart({
           }}
           onPointerUp={(e) => {
             const end = pointer(e);
-            if (start.current !== null && Math.abs(end - start.current) > 1000)
-              onRange([
-                Math.min(start.current, end),
-                Math.max(start.current, end),
-              ]);
+            if (
+              start.current !== null &&
+              Math.abs(end - start.current) > 1000
+            ) {
+              if (dragMode === "pan") {
+                const d = start.current - end;
+                onRange([range[0] + d, range[1] + d]);
+              } else {
+                const r: Range = [
+                  Math.min(start.current, end),
+                  Math.max(start.current, end),
+                ];
+                if (dragMode === "zoom") onRange(r);
+                else onSelect(r);
+              }
+            }
             start.current = null;
           }}
           onPointerCancel={() => {
             start.current = null;
           }}
           onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onSelect(null);
+            }
+            if (e.key === "Enter" && cursor !== null) {
+              e.preventDefault();
+              onSelect([
+                Math.max(range[0], cursor - 15000),
+                Math.min(range[1], cursor + 15000),
+              ]);
+            }
             if (e.key === "+" || e.key === "=") {
               e.preventDefault();
               zoom(0.75);
@@ -245,8 +348,15 @@ export default function Chart({
             if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
               e.preventDefault();
               const d =
-                (range[1] - range[0]) * 0.2 * (e.key === "ArrowLeft" ? -1 : 1);
-              onRange([range[0] + d, range[1] + d]);
+                (range[1] - range[0]) * 0.02 * (e.key === "ArrowLeft" ? -1 : 1);
+              if (e.shiftKey) onRange([range[0] + d * 10, range[1] + d * 10]);
+              else
+                onCursor(
+                  Math.max(
+                    range[0],
+                    Math.min(range[1], (cursor ?? range[0]) + d),
+                  ),
+                );
             }
           }}
         >
@@ -263,6 +373,18 @@ export default function Chart({
               <path d="M0 7L7 0" stroke="#c9c6bc" strokeWidth=".8" />
             </pattern>
           </defs>
+          <text x={left} y={13}>
+            {panel.axis === "normalized"
+              ? "z (normalized)"
+              : series[0]
+                ? signals[series[0].signal].unit
+                : ""}
+          </text>
+          {panel.axis === "separate" && series[1] && (
+            <text x={width - right + 10} y={13}>
+              {signals[series[1].signal].unit}
+            </text>
+          )}
           {[0, 1, 2, 3, 4].map((t) => (
             <g key={t}>
               <line
@@ -314,6 +436,17 @@ export default function Chart({
             </text>
           ))}
           <g clipPath={`url(#clip-${panel.id})`}>
+            {selection && (
+              <rect
+                data-testid="selected-interval"
+                x={x(selection[0])}
+                y={top}
+                width={Math.max(0, x(selection[1]) - x(selection[0]))}
+                height={h}
+                fill="#2b766b"
+                opacity=".08"
+              />
+            )}
             {series.flatMap((s, i) => {
               const session = picked.find((p) => p.id === s.sessionId)!,
                 o = offset(session, layout);
@@ -329,7 +462,9 @@ export default function Chart({
                   />
                   {i === 0 && (
                     <text x={x(g.to + o) + 4} y={top + 13}>
-                      {g.reason === "quality" ? "Osäker kvalitet" : "Datalucka"}
+                      {g.reason === "quality"
+                        ? "Uncertain quality"
+                        : "Missing data"}
                     </text>
                   )}
                 </g>
@@ -346,13 +481,42 @@ export default function Chart({
                     stroke="#aaa79b"
                     strokeDasharray="3 4"
                   />
-                  <text
-                    x={x(ev.t + offset(s, layout)) + 4}
-                    y={top + h - 8 - i * 16}
+                  <g
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${displayText(ev.label)}, ${s.participantLabel}, ${timeLabel(ev.t)}`}
+                    onClick={() =>
+                      setEventDetail(
+                        `${s.participantLabel} · ${displayText(s.title)} · ${displayText(ev.label)} · ${timeLabel(ev.t)}${ev.value !== undefined ? ` · ${ev.value}` : ""}`,
+                      )
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEventDetail(
+                          `${s.participantLabel} · ${displayText(ev.label)} · ${timeLabel(ev.t)}${ev.value !== undefined ? ` · ${ev.value}` : ""}`,
+                        );
+                      }
+                    }}
                   >
-                    {ev.label}
-                    {ev.value !== undefined ? ` · ${ev.value}` : ""}
-                  </text>
+                    <title>
+                      {displayText(ev.label)} · {timeLabel(ev.t)}
+                    </title>
+                    <circle
+                      cx={x(ev.t + offset(s, layout))}
+                      cy={top + h - 8 - i * 14}
+                      r={5}
+                      fill="#7b8079"
+                    />
+                    <rect
+                      x={x(ev.t + offset(s, layout)) - 12}
+                      y={top + h - 20 - i * 14}
+                      width={24}
+                      height={24}
+                      fill="transparent"
+                    />
+                  </g>
                 </g>
               )),
             )}
@@ -409,26 +573,100 @@ export default function Chart({
           </g>
         </svg>
       )}
+      {eventDetail && (
+        <div className="event-popover" role="status">
+          {eventDetail}
+          <button onClick={() => setEventDetail(null)}>Close event</button>
+        </div>
+      )}
+      {cursor !== null && (
+        <div className="cursor-values" aria-live="polite">
+          <span>{timeLabel(cursor, layout.alignment === "absolute")}</span>
+          {series.map((s, i) => {
+            const t =
+              cursor -
+              offset(
+                picked.find((p) => p.id === s.sessionId)!,
+                layout,
+              );
+            const gap = s.gaps.find((g) => t >= g.from && t <= g.to);
+            const nearest = s.points.reduce<Series["points"][number] | null>(
+              (best, p) =>
+                !best || Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best,
+              null,
+            );
+            const value =
+              gap ||
+              !nearest ||
+              Math.abs(nearest.t - t) > signals[s.signal].gapMs
+                ? "No data"
+                : nearest.quality !== "measured"
+                  ? "Uncertain data"
+                  : `${nearest.value.toFixed(s.signal === "phoneacc" ? 2 : 1)} ${signals[s.signal].unit}`;
+            return (
+              <span
+                key={`${s.sessionId}-${s.signal}`}
+                style={{ color: color(i) }}
+              >
+                {picked.find((p) => p.id === s.sessionId)?.participantLabel} ·{" "}
+                {displayText(
+                  picked.find((p) => p.id === s.sessionId)?.title ?? "",
+                )}{" "}
+                · {signals[s.signal].name}: {value}
+              </span>
+            );
+          })}
+          <small>Nearest displayed sample</small>
+        </div>
+      )}
+      {selection && (
+        <section
+          className="interval-stats"
+          aria-label="Selected interval statistics"
+        >
+          <header>
+            <h3>
+              Selected interval · {timeLabel(selection[0])}–
+              {timeLabel(selection[1])}
+            </h3>
+            <button onClick={() => onRange(selection)}>Zoom to interval</button>
+            <button onClick={() => onSelect(null)}>Clear interval</button>
+          </header>
+          {statsError ? (
+            <p role="alert">{statsError}</p>
+          ) : selectedStats.key !== statsKey ? (
+            <p>Loading interval statistics…</p>
+          ) : (
+            selectedStats.series.map((s) => (
+              <div key={`${s.sessionId}-${s.signal}`}>
+                <span>
+                  {sessionLabel(s.sessionId)} · {signals[s.signal].name}
+                </span>
+                <strong>
+                  Mean {s.summary.mean?.toFixed(1) ?? "—"}{" "}
+                  {signals[s.signal].unit}
+                </strong>
+                <span>
+                  Min {s.summary.min?.toFixed(1) ?? "—"} · Max{" "}
+                  {s.summary.max?.toFixed(1) ?? "—"}
+                </span>
+              </div>
+            ))
+          )}
+        </section>
+      )}
       <div className="chart-summary">
-        {series.map((s, i) => (
-          <span key={`${s.sessionId}-${s.signal}`}>
-            <strong style={{ color: color(i) }}>
-              {s.summary.mean?.toFixed(s.signal === "phoneacc" ? 2 : 1) ?? "—"}{" "}
-              {signals[s.signal].unit}
-            </strong>
-            <small>Medelvärde</small>
-          </span>
-        ))}
         <details className="chart-data-details">
-          <summary>Datakvalitet</summary>
+          <summary>Data quality</summary>
           <p>
             {series
               .reduce((a, s) => a + s.summary.count, 0)
-              .toLocaleString("sv-SE")}{" "}
-            giltiga samples · {series.reduce((a, s) => a + s.gaps.length, 0)}{" "}
-            luckor. Medelvärden gäller synligt intervall. Luckor fylls inte i.
+              .toLocaleString("en-GB")}{" "}
+            valid samples · {series.reduce((a, s) => a + s.gaps.length, 0)}{" "}
+            gaps. Statistics use the visible interval. Gaps are not
+            interpolated.
             {panel.axis === "normalized"
-              ? " Normalisering: z = (x − μ) / σ."
+              ? " Normalization: z = (x − μ) / σ."
               : ""}
           </p>
         </details>

@@ -20,7 +20,7 @@ export function requireSession(workspace: string, id: string): Session {
   const row = getDb()
     .prepare("SELECT metadata FROM sessions WHERE id=? AND workspace=?")
     .get(id, workspace) as { metadata: string } | undefined;
-  if (!row) throw new ApiError(404, "Sessionen finns inte i din arbetsyta");
+  if (!row) throw new ApiError(404, "Session not found in your workspace");
   return JSON.parse(row.metadata);
 }
 export function ingest(workspace: string, input: unknown) {
@@ -36,7 +36,7 @@ export function ingest(workspace: string, input: unknown) {
       { hash: string; count: number } | undefined;
     if (prev) {
       if (prev.hash !== hash)
-        throw new ApiError(409, "Paket-ID återanvänt med annat innehåll");
+        throw new ApiError(409, "Batch ID reused with different contents");
       db.exec("COMMIT");
       return {
         version: 1,
@@ -53,7 +53,7 @@ export function ingest(workspace: string, input: unknown) {
     if (!definition)
       throw new ApiError(
         400,
-        "Sessionsupplägget saknas. Synkronisera formulärdefinitionen först.",
+        "Session type missing. Sync the questionnaire definition first.",
       );
     const template = TemplateSchema.parse(
       JSON.parse(definition.config as string),
@@ -73,7 +73,7 @@ export function ingest(workspace: string, input: unknown) {
       )
         throw new ApiError(
           400,
-          "Självskattningen matchar inte sin formulärversion",
+          "Self-report does not match its questionnaire version",
         );
     }
     const row = db
@@ -81,7 +81,7 @@ export function ingest(workspace: string, input: unknown) {
       .get(batch.session.id) as
       { workspace: string; metadata: string } | undefined;
     if (row && row.workspace !== workspace)
-      throw new ApiError(404, "Sessionen finns inte i din arbetsyta");
+      throw new ApiError(404, "Session not found in your workspace");
     if (row) {
       const previous = JSON.parse(row.metadata) as Session;
       if (
@@ -93,19 +93,19 @@ export function ingest(workspace: string, input: unknown) {
         previous.typeVersion !== batch.session.typeVersion ||
         previous.timePolicy !== batch.session.timePolicy
       )
-        throw new ApiError(409, "Sessionens ursprung får inte ändras");
+        throw new ApiError(409, "Session origin cannot be changed");
       if (previous.state === "ended" && batch.session.state === "recording")
-        throw new ApiError(409, "Avslutad session kan inte återöppnas");
+        throw new ApiError(409, "An ended session cannot be reopened");
       const events = new Map(previous.events.map((e) => [e.id, e]));
       for (const e of metadata.events) {
         const old = events.get(e.id);
         if (old && JSON.stringify(old) !== JSON.stringify(e))
-          throw new ApiError(409, "Lagrad händelse får inte ändras");
+          throw new ApiError(409, "A stored event cannot be changed");
         events.set(e.id, e);
       }
       metadata.events = [...events.values()].sort((a, b) => a.t - b.t);
       if (metadata.events.length > 1000)
-        throw new ApiError(409, "Sessionen har för många händelser");
+        throw new ApiError(409, "Too many session events");
       metadata.durationMs = Math.max(previous.durationMs, metadata.durationMs);
     }
     db.prepare(
@@ -133,7 +133,7 @@ export function ingest(workspace: string, input: unknown) {
           prev.quality !== s.quality ||
           (prev.sensor ?? undefined) !== s.sensorTime
         )
-          throw new ApiError(409, "Befintligt råsample får inte ändras");
+          throw new ApiError(409, "An existing raw sample cannot be changed");
       } else
         insert.run(
           batch.session.id,
@@ -309,7 +309,7 @@ export function saveTemplate(workspace: string, input: unknown) {
     )
     .get(workspace, t.id, t.version);
   if (prev && prev.config !== JSON.stringify(t))
-    throw new ApiError(409, "Skapa en ny formulärversion för ändringar");
+    throw new ApiError(409, "Create a new questionnaire version for changes");
   getDb()
     .prepare("INSERT OR IGNORE INTO templates VALUES(?,?,?,?)")
     .run(workspace, t.id, t.version, JSON.stringify(t));

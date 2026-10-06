@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "apexVIP · Analysplattform",
+  title: "apexVIP · Analysis workspace",
   description:
-    "Fysiologiska signaler, sessioner och forskning i en gemensam arbetsyta.",
+    "Record and analyze physiological signals in one workspace.",
 };
 export default function RootLayout({
   children,
@@ -11,7 +11,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="sv">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

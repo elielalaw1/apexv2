@@ -62,14 +62,14 @@ async function handle(req: Request, ctx: Context) {
       return NextResponse.json({ email: user.email, workspace });
     if (path === "ingest" && method === "POST") {
       const length = Number(req.headers.get("content-length") || 0);
-      if (length > 2e6) throw new ApiError(413, "Paketet är för stort");
+      if (length > 2e6) throw new ApiError(413, "Batch is too large");
       const body = await req.text();
-      if (body.length > 2e6) throw new ApiError(413, "Paketet är för stort");
+      if (body.length > 2e6) throw new ApiError(413, "Batch is too large");
       return NextResponse.json(ingest(workspace, JSON.parse(body)));
     }
     if (path === "demo" && method === "POST") {
       if (process.env.APEX_DEMO_ENABLED === "false")
-        throw new ApiError(403, "Demoläget är avstängt");
+        throw new ApiError(403, "Demo mode is disabled");
       saveTemplate(workspace, defaultTemplate);
       for (const b of demoBatches()) ingest(workspace, b);
       return NextResponse.json({ sessions: sessions(workspace) });
@@ -79,10 +79,18 @@ async function handle(req: Request, ctx: Context) {
     if (path.startsWith("sessions/")) {
       const [, id, action] = path.split("/");
       const session = requireSession(workspace, id);
+      if (action === "signals")
+        return NextResponse.json(
+          getDb()
+            .prepare(
+              "SELECT signal, count(*) AS count FROM samples WHERE session_id=? GROUP BY signal",
+            )
+            .all(id),
+        );
       if (action === "series") {
         const signal = url.searchParams.get("signal") as SignalKind;
         if (!signalKinds.includes(signal))
-          throw new ApiError(400, "Okänd signal");
+          throw new ApiError(400, "Unknown signal");
         const from = Number(url.searchParams.get("from") ?? 0),
           to = Number(url.searchParams.get("to") ?? session.durationMs);
         if (
@@ -91,13 +99,13 @@ async function handle(req: Request, ctx: Context) {
           from < 0 ||
           to < from
         )
-          throw new ApiError(400, "Ogiltigt tidsintervall");
+          throw new ApiError(400, "Invalid time interval");
         return NextResponse.json(readSeries(workspace, id, signal, from, to));
       }
       if (action === "raw") {
         const after = Number(url.searchParams.get("after") ?? -1);
         if (!Number.isSafeInteger(after))
-          throw new ApiError(400, "Ogiltig cursor");
+          throw new ApiError(400, "Invalid cursor");
         return NextResponse.json({
           session,
           points: rawPage(workspace, id, after),
@@ -122,7 +130,7 @@ async function handle(req: Request, ctx: Context) {
           .map((r) => JSON.parse(r.config as string)),
       );
     }
-    throw new ApiError(404, "Resursen finns inte");
+    throw new ApiError(404, "Resource not found");
   } catch (error) {
     if (error instanceof ApiError)
       return NextResponse.json(
@@ -131,14 +139,14 @@ async function handle(req: Request, ctx: Context) {
       );
     if (error instanceof z.ZodError)
       return NextResponse.json(
-        { error: error.issues[0]?.message || "Ogiltiga data" },
+        { error: error.issues[0]?.message || "Invalid data" },
         { status: 400 },
       );
     if (error instanceof SyntaxError)
-      return NextResponse.json({ error: "Ogiltig JSON" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     console.error(error);
     return NextResponse.json(
-      { error: "Servern kunde inte slutföra begäran" },
+      { error: "The server could not complete the request" },
       { status: 500 },
     );
   }

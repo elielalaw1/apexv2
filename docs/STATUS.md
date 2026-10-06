@@ -2,11 +2,13 @@
 
 Första sammanhängande milstolpen är genomförd i ett nytt lokalt Git-repo, `apexVIP`, på grenen `main`. Repot är inte publicerat på GitHub. Originalrepos är bevarade: apex-web `7459997`, apex-mobile `5e933f8`.
 
-## Förenklad dashboard
+## Omdesign och engelskt gränssnitt
 
-Startsidan visar en kort sammanfattning och de fyra senaste sessionerna. Upplägg och konfiguration ligger under Fler verktyg. Analysens redigering visas via Anpassa analys, medan tekniska sampleuppgifter finns under Datakvalitet. Ingen lagrad mätdata eller analysfunktion har tagits bort.
+Den nya sessionsbaserade designen är implementerad enligt DESIGN_BRIEF.txt med engelska systemtexter för webb och mobil. En ny analys börjar med ett diagram; Add signal och Compare sessions öppnar uppgiftsbaserade väljare. Tekniska detaljer, formulär-JSON och avancerad anpassning öppnas vid behov. Tidigare sparade vyer och historiska formulär behåller sin struktur och betydelse.
 
-Omdesignen har granskats på desktop och mobil. TypeScript, produktionsbygge och två uppdaterade Playwright-tester passerade. Testerna kontrollerar också att startsidan håller extra verktyg hopfällda och att den smala vyn saknar horisontell sidöverströmning. [Ny översikt](dashboard-desktop.png) · [Mobil översikt](dashboard-mobile-web.png).
+8 integritetstester, 2 uppdaterade tester mot produktionsbygget och mobilens engelska XCTest passerade. Simulatorprovet verifierade återstart och synk; separat API-kontroll hittade 3 syntetiska mobilpass med exakt 60 HR + 60 RR per pass i testdatabasen. Den vanliga webbdatabasen har kvar 4 pass, 3 deltagare och 72 minuter.
+
+Se [omdesign och begränsningar](REDESIGN.md), [standardanalys](analysis-default.png), [desktop](dashboard-desktop.png) och [mobilöversikt](dashboard-mobile-web.png). Formulärstödet omfattar numeriska skalor; kategoriska svarsalternativ återstår som utökning av datakontraktet.
 
 ## Implementerat och kontrollerat
 
@@ -28,7 +30,7 @@ Omdesignen har granskats på desktop och mobil. TypeScript, produktionsbygge och
 | Mobilens TypeScript och iOS/Hermes-export | Godkända |
 | Native iOS-bygge inklusive Polar-brygga | Godkänt med Xcode |
 | XCTest på iPhone 17-simulator | 1 test godkänt: skapa syntetiskt pass, avsluta appen, återstarta, synkronisera och logga ut |
-| Separat API-kontroll efter mobiltestet | 2 syntetiska mobilpass, exakt 60 HR + 60 RR per pass |
+| Separat API-kontroll efter mobiltestet | 3 syntetiska mobilpass, exakt 60 HR + 60 RR per pass |
 | Webbens npm audit | 0 rapporterade sårbarheter vid kontrollen |
 | Mobilens npm audit | 32 rapporterade beroendesårbarheter: 10 moderate, 22 high; kvarstående arbete |
 

@@ -35,7 +35,7 @@ export async function saveLocalTemplate(workspace: string, input: Template) {
   );
   const config = JSON.stringify(t);
   if (prev && prev.config !== config)
-    throw Error("Formulärversionen har ändrats. Skapa en ny version.");
+    throw Error("Questionnaire definition changed. Create a new version.");
   await d.runAsync(
     "INSERT OR IGNORE INTO local_templates VALUES(?,?,?,?)",
     workspace,
@@ -83,7 +83,7 @@ export async function seal(session: Session, workspace: string) {
       session.id,
       workspace,
     );
-    if (!row) throw Error("Sessionen saknas i arbetsytan");
+    if (!row) throw Error("Session not found in this workspace");
     if (row.sealed) return;
     await tx.runAsync(
       "UPDATE local_sessions SET metadata=?,sealed=1 WHERE id=?",
@@ -149,7 +149,7 @@ export async function recover(id: string, workspace: string) {
     id,
     workspace,
   );
-  if (!row) throw Error("Ingen oavslutad session");
+  if (!row) throw Error("No unfinished session");
   const s: Session = JSON.parse(row.metadata);
   const last = await d.getFirstAsync<{ t: number }>(
     "SELECT MAX(json_extract(payload,'$.t')) t FROM local_samples WHERE session_id=?",
@@ -161,7 +161,8 @@ export async function recover(id: string, workspace: string) {
     id: randomUUID(),
     t: s.durationMs,
     type: "note",
-    label: "Återställd efter avbrott. Sista minnesbufferten kan saknas.",
+    label:
+      "Recovered after interruption. The last memory buffer may be missing.",
   });
   await seal(s, workspace);
   return s;
@@ -181,7 +182,7 @@ export class SampleWriter {
   append(sample: Sample) {
     if (this.buffer.length >= 1000) {
       this.error =
-        "Lagringsbufferten är full. Insamling stoppad; redan mottagna samples finns kvar.";
+        "Storage buffer is full. Recording stopped; received samples are retained.";
       throw Error(this.error);
     }
     this.buffer.push(sample);
@@ -208,7 +209,7 @@ export class SampleWriter {
         this.persisted += part.length;
         this.error = null;
       } catch (e) {
-        this.error = e instanceof Error ? e.message : "Lagring misslyckades";
+        this.error = e instanceof Error ? e.message : "Storage failed";
         throw e;
       } finally {
         this.running = null;

@@ -5,17 +5,17 @@ export const signals: Record<
   SignalKind,
   { name: string; unit: string; color: string; gapMs: number }
 > = {
-  hr: { name: "Hjärtfrekvens", unit: "bpm", color: "#2b766b", gapMs: 3500 },
-  rr: { name: "RR-intervall", unit: "ms", color: "#9b6b32", gapMs: 3500 },
+  hr: { name: "Heart rate", unit: "bpm", color: "#2b766b", gapMs: 3500 },
+  rr: { name: "RR interval", unit: "ms", color: "#9b6b32", gapMs: 3500 },
   ecg: { name: "ECG", unit: "µV", color: "#706bb0", gapMs: 80 },
   h10acc: {
-    name: "H10 · acceleration",
+    name: "H10 acceleration",
     unit: "mg",
     color: "#4a7097",
     gapMs: 200,
   },
   phoneacc: {
-    name: "Telefon · acceleration",
+    name: "Phone acceleration",
     unit: "g",
     color: "#aa666c",
     gapMs: 1500,
@@ -84,22 +84,22 @@ export const BatchSchema = z
       if (seen.has(key))
         ctx.addIssue({
           code: "custom",
-          message: "Duplicerat sample-index i paketet",
+          message: "Duplicate sample index in batch",
         });
       seen.add(key);
       if (s.t > batch.session.durationMs + 5000)
         ctx.addIssue({
           code: "custom",
-          message: "Sample utanför sessionens tidsintervall",
+          message: "Sample outside session time range",
         });
       if (
         s.quality === "measured" &&
         s.signal === "hr" &&
         (s.value <= 0 || s.value > 300)
       )
-        ctx.addIssue({ code: "custom", message: "Ogiltig puls" });
+        ctx.addIssue({ code: "custom", message: "Invalid heart rate" });
       if (s.quality === "measured" && s.signal === "rr" && s.value <= 0)
-        ctx.addIssue({ code: "custom", message: "Ogiltigt RR-intervall" });
+        ctx.addIssue({ code: "custom", message: "Invalid RR interval" });
     }
   });
 export type Batch = z.infer<typeof BatchSchema>;
@@ -131,7 +131,7 @@ export const LayoutSchema = z
   .strict()
   .superRefine((layout, ctx) => {
     if (new Set(layout.panels.map((p) => p.id)).size !== layout.panels.length)
-      ctx.addIssue({ code: "custom", message: "Panel-ID måste vara unika" });
+      ctx.addIssue({ code: "custom", message: "Chart IDs must be unique" });
     for (const p of layout.panels) {
       if (
         new Set(p.sessionIds).size !== p.sessionIds.length ||
@@ -139,7 +139,7 @@ export const LayoutSchema = z
       )
         ctx.addIssue({
           code: "custom",
-          message: "Duplicerad session eller signal i panel",
+          message: "Duplicate session or signal in chart",
         });
       if (
         p.axis === "separate" &&
@@ -148,7 +148,7 @@ export const LayoutSchema = z
         ctx.addIssue({
           code: "custom",
           message:
-            "Separata axlar stödjer högst två enheter. Använd fler paneler eller normalisering.",
+            "Separate axes support at most two units. Use more charts or normalization.",
         });
       if (
         p.axis === "shared" &&
@@ -156,7 +156,7 @@ export const LayoutSchema = z
       )
         ctx.addIssue({
           code: "custom",
-          message: "Gemensam axel kräver samma enhet",
+          message: "A shared axis requires the same unit",
         });
     }
   });
@@ -202,12 +202,12 @@ export const TemplateSchema = z
       new Set(template.questions.map((q) => q.id)).size !==
       template.questions.length
     )
-      ctx.addIssue({ code: "custom", message: "Fråge-ID måste vara unika" });
+      ctx.addIssue({ code: "custom", message: "Question IDs must be unique" });
     for (const q of template.questions)
       if (q.min >= q.max)
         ctx.addIssue({
           code: "custom",
-          message: "Frågans minimum måste vara mindre än maximum",
+          message: "Question minimum must be lower than maximum",
         });
   });
 export type Template = z.infer<typeof TemplateSchema>;

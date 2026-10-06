@@ -23,3 +23,5 @@ Paket: högst 2000 samples och 2 MB JSON. Mobil använder 500. Definitionen för
 Råsample: `signal`, `index`, `t` relativa ms, `receivedAt` Unix ms, valfritt `sensorTime` sträng, `value`, `quality`. Signaler och enheter definieras centralt i `src/core/contract.ts`. `sensorTime` är inte automatiskt konverterad till gemensam tid. `quality=measured` ingår i statistik; suspect/missing bevaras men bryter diagrammets giltiga kurva.
 
 Renderpunkter är första/sista/min/max per tidsbucket; statistik är SQL-beräkning på rådata. Populationsstandardavvikelse används för z-normalisering. Ett tomt fönster ger null-statistik, inte nollvärden. CSV-export innehåller rådata och dess källtid, inte normaliserade eller renderförenklade värden. Signalernas faktiska enheter följer kontraktet; analyskonfigurationen exporteras separat.
+
+`GET /api/sessions/:id/signals` ger tillgängliga signaler och råsampleantal. Samma arbetsytekontroll som series/raw gäller; saknad eller främmande session ger 404. Endpunkten används av signalväljare och HR-fallback.
