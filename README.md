@@ -24,7 +24,9 @@ Demodata lagras genom samma validerade ingest-kedja som mobilmätningar. Databas
 
 ## Webbflöden
 
-- Översikt, deltagare, filtrerade sessioner och sessionsdetaljer med metadata/datakvalitet.
+- Starta i en enkel översikt med senaste sessionerna. Öppna en session eller gå vidare till analysen.
+- Deltagare, filtrerade sessioner och sessionsdetaljer med metadata/datakvalitet.
+- Analysens upplägg och panelredigering visas via **Anpassa analys**. Datakvalitet och export öppnas vid behov; extra navigation finns under **Fler verktyg**.
 - Analysyta: lägg till, ta bort, flytta med drag eller knappar, ändra bredd/höjd och konfigurera paneler. Upp till fyra sessioner och två signalval per panel i gränssnittet.
 - Overlay med märkta enheter, gemensam axel för samma enhet, två separata axlar eller explicit z-normalisering. Länkad markör, zoom/panorering och intervallstatistik från rådata.
 - Absolut tid, sessionsrelativ tid och händelserelativ tid. Händelse som saknas ger ett synligt fel.

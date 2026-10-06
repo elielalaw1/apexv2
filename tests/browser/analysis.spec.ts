@@ -8,6 +8,31 @@ test("API ingestion, linked charts, layout reload and workspace isolation", asyn
   await page.goto("/");
   await page.getByRole("button", { name: "Öppna demoprojekt" }).click();
   await expect(
+    page.getByRole("heading", { name: "Din översikt", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".recent-list article")).toHaveCount(4);
+  await expect(
+    page.getByRole("button", { name: "Konfiguration", exact: true }),
+  ).not.toBeVisible();
+  await page.screenshot({ path: "docs/dashboard-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.getByRole("button", { name: "Öppna analys", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: "docs/dashboard-mobile-web.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1080 });
+  await page.getByRole("button", { name: "Öppna analys", exact: true }).click();
+  await expect(page.getByLabel("Uppläggets namn")).not.toBeVisible();
+
+  await expect(
     page.getByRole("heading", { name: "Analysyta", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".chart")).toHaveCount(3);
@@ -27,12 +52,19 @@ test("API ingestion, linked charts, layout reload and workspace isolation", asyn
   await page.getByRole("button", { name: "Zooma in", exact: true }).click();
   await expect(page.getByTestId("time-range")).not.toHaveText(before!);
   await page.getByRole("button", { name: "Hela passet", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Anpassa analys", exact: true })
+    .click();
   await page.getByLabel("Uppläggets namn").fill("Verifierat upplägg");
   await page
     .getByRole("button", { name: "Spara upplägg", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText("sparat");
   await page.reload();
+  await page.getByRole("button", { name: "Öppna analys", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Anpassa analys", exact: true })
+    .click();
   await expect(page.getByLabel("Uppläggets namn")).toHaveValue(
     "Verifierat upplägg",
   );
@@ -40,6 +72,7 @@ test("API ingestion, linked charts, layout reload and workspace isolation", asyn
   await expect(
     page.locator(".chart").first().locator("path[vector-effect]"),
   ).toHaveCount(2);
+  await page.getByRole("button", { name: "Klar", exact: true }).click();
   await page.screenshot({ path: "docs/analysis-desktop.png", fullPage: true });
   await page.getByRole("button", { name: /^Sessioner/ }).click();
   await page
@@ -89,6 +122,10 @@ test("Panel editing, duplication and time alignment retain configuration", async
   test.setTimeout(60000);
   await page.goto("/");
   await page.getByRole("button", { name: "Öppna demoprojekt" }).click();
+  await page.getByRole("button", { name: "Öppna analys", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Anpassa analys", exact: true })
+    .click();
   await expect(page.locator(".chart")).toHaveCount(3);
   await page.getByRole("button", { name: "Duplicera", exact: true }).click();
   await page.getByLabel("Uppläggets namn").fill("Panelkontroll · kopia");
@@ -119,6 +156,10 @@ test("Panel editing, duplication and time alignment retain configuration", async
     .click();
   await expect(page.getByRole("status")).toContainText("sparat");
   await page.reload();
+  await page.getByRole("button", { name: "Öppna analys", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Anpassa analys", exact: true })
+    .click();
   await expect(page.getByLabel("Uppläggets namn")).toHaveValue(
     "Panelkontroll · kopia",
   );

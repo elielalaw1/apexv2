@@ -110,7 +110,7 @@ export default function Dashboard() {
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [error, setError] = useState("");
-  const [view, setView] = useState<View>("Analysyta"),
+  const [view, setView] = useState<View>("Översikt"),
     [sessions, setSessions] = useState<Session[]>([]),
     [saved, setSaved] = useState<Layout[]>([]),
     [templates, setTemplates] = useState<Template[]>([]),
@@ -119,6 +119,7 @@ export default function Dashboard() {
     [range, setRange] = useState<Range>([0, 900000]),
     [cursor, setCursor] = useState<number | null>(null),
     [editor, setEditor] = useState<string | null>(null),
+    [editing, setEditing] = useState(false),
     [detail, setDetail] = useState<Session | null>(null);
   const [query, setQuery] = useState(""),
     [kind, setKind] = useState("all"),
@@ -374,13 +375,11 @@ export default function Dashboard() {
         </div>
         <div className="workspace">
           <span className="workspace-symbol">A</span>
-          <div>
-            APEX Research Lab<small>{user.workspace}</small>
-          </div>
+          <div>Coach workspace</div>
         </div>
-        <p className="nav-label">ARBETSYTA</p>
+
         <nav>
-          {nav.map(([v, Icon]) => (
+          {nav.slice(0, 4).map(([v, Icon]) => (
             <button
               key={v}
               className={view === v ? "active" : ""}
@@ -395,9 +394,27 @@ export default function Dashboard() {
             </button>
           ))}
         </nav>
+        <details className="secondary-nav">
+          <summary>Fler verktyg</summary>
+          <nav>
+            {nav.slice(4).map(([v, Icon]) => (
+              <button
+                key={v}
+                className={view === v ? "active" : ""}
+                onClick={() => {
+                  setView(v);
+                  setDetail(null);
+                }}
+              >
+                <Icon size={19} />
+                {v}
+              </button>
+            ))}
+          </nav>
+        </details>
         <div className="sidebar-bottom">
           <div className="status-dot" />
-          Lokal analysplattform<p>Kontrakt v1 · Rådata bevaras</p>
+          Din arbetsyta
           <button
             onClick={() =>
               void action(async () => {
@@ -451,10 +468,13 @@ export default function Dashboard() {
           )}
           <div className="page-heading">
             <div>
-              <p className="eyebrow">
-                APEX / {view === "Analysyta" ? "SIGNALANALYS" : "RESEARCH LAB"}
-              </p>
-              <h1>{detail ? "Sessionsdetalj" : view}</h1>
+              <h1>
+                {detail
+                  ? "Sessionsdetalj"
+                  : view === "Översikt"
+                    ? "Din översikt"
+                    : view}
+              </h1>
               <p>
                 {view === "Analysyta"
                   ? "Utforska signaler och jämför sessioner på en gemensam tidslinje."
@@ -464,12 +484,25 @@ export default function Dashboard() {
                       ? "Pseudonyma identifierare håller fokus på mätningen."
                       : view === "Konfiguration"
                         ? "Versionerade sessionstyper, händelser och självskattningar."
-                        : "Din arbetsyta för fysiologiska mätningar."}
+                        : view === "Översikt"
+                          ? "Senaste mätningarna, samlade på ett ställe."
+                          : "Din arbetsyta för fysiologiska mätningar."}
               </p>
             </div>
             {view === "Analysyta" && layout && (
               <div className="actions">
                 <button
+                  aria-expanded={editing}
+                  onClick={() => {
+                    setEditing(!editing);
+                    setEditor(null);
+                  }}
+                >
+                  <SlidersHorizontalIcon />
+                  {editing ? "Klar" : "Anpassa analys"}
+                </button>
+                <button
+                  hidden={!editing}
                   onClick={() => {
                     const l = {
                       ...layout,
@@ -529,7 +562,7 @@ export default function Dashboard() {
             <>
               {view === "Analysyta" && layout && (
                 <>
-                  <div className="analysis-toolbar">
+                  <div className="analysis-toolbar" hidden={!editing}>
                     <div>
                       <label className="sr-only" htmlFor="layout-name">
                         Uppläggets namn
@@ -593,7 +626,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="timeline-controls">
-                    <label>
+                    <label hidden={!editing}>
                       Tidsjustering{" "}
                       <select
                         value={layout.alignment}
@@ -611,7 +644,7 @@ export default function Dashboard() {
                         <option value="event">Relativt händelse</option>
                       </select>
                     </label>
-                    {layout.alignment === "event" && (
+                    {editing && layout.alignment === "event" && (
                       <label>
                         Händelse
                         <input
@@ -679,7 +712,7 @@ export default function Dashboard() {
                   <div className="analysis-caption">
                     <span>
                       <i className="status-dot" />
-                      Länkad tidsaxel · {layout.panels.length} paneler
+                      Gemensam tidslinje
                     </span>
                     <span>
                       Markör{" "}
@@ -698,7 +731,7 @@ export default function Dashboard() {
                         className="panel"
                         key={p.id}
                         style={{ gridColumn: `span ${p.width}` }}
-                        draggable={editor !== p.id}
+                        draggable={editing && editor !== p.id}
                         onDragStart={(e) =>
                           e.dataTransfer.setData("text/plain", p.id)
                         }
@@ -723,6 +756,7 @@ export default function Dashboard() {
                           </div>
                           <div>
                             <button
+                              hidden={!editing}
                               title="Flytta upp"
                               aria-label={`Flytta ${p.title} upp`}
                               disabled={i === 0}
@@ -731,6 +765,7 @@ export default function Dashboard() {
                               <ArrowUpIcon />
                             </button>
                             <button
+                              hidden={!editing}
                               title="Flytta ner"
                               aria-label={`Flytta ${p.title} ner`}
                               disabled={i === layout.panels.length - 1}
@@ -741,9 +776,10 @@ export default function Dashboard() {
                             <button
                               aria-label={`Inställningar ${p.title}`}
                               className={editor === p.id ? "selected" : ""}
-                              onClick={() =>
-                                setEditor(editor === p.id ? null : p.id)
-                              }
+                              onClick={() => {
+                                setEditing(true);
+                                setEditor(editor === p.id ? null : p.id);
+                              }}
                             >
                               <SlidersHorizontalIcon />
                             </button>
@@ -956,32 +992,35 @@ export default function Dashboard() {
                       </section>
                     ))}
                   </div>
-                  <div className="analysis-foot">
-                    <p>
-                      Statistik för synligt intervall beräknas från giltiga
-                      råsamples. Skrafferade områden visar dataluckor.
-                    </p>
-                    <button
-                      onClick={() =>
-                        download(
-                          `${layout.id}.json`,
-                          JSON.stringify(
-                            {
-                              layout,
-                              visibleInterval: range,
-                              timePolicy: layout.alignment,
-                            },
-                            null,
-                            2,
-                          ),
-                          "application/json",
-                        )
-                      }
-                    >
-                      <DownloadSimpleIcon />
-                      Exportera analyskonfiguration
-                    </button>
-                  </div>
+                  <details className="analysis-help">
+                    <summary>Om datan och export</summary>
+                    <div className="analysis-foot">
+                      <p>
+                        Statistik för synligt intervall beräknas från giltiga
+                        råsamples. Skrafferade områden visar dataluckor.
+                      </p>
+                      <button
+                        onClick={() =>
+                          download(
+                            `${layout.id}.json`,
+                            JSON.stringify(
+                              {
+                                layout,
+                                visibleInterval: range,
+                                timePolicy: layout.alignment,
+                              },
+                              null,
+                              2,
+                            ),
+                            "application/json",
+                          )
+                        }
+                      >
+                        <DownloadSimpleIcon />
+                        Exportera analyskonfiguration
+                      </button>
+                    </div>
+                  </details>
                 </>
               )}
               {view === "Sessioner" && (
@@ -1052,45 +1091,87 @@ export default function Dashboard() {
               )}
               {view === "Översikt" && (
                 <>
-                  <div className="metric-row">
-                    <div>
-                      <small>SESSIONER</small>
-                      <strong>{sessions.length}</strong>
-                      <span>
-                        {sessions.filter((s) => s.demo).length} syntetiska
-                      </span>
-                    </div>
-                    <div>
-                      <small>DELTAGARE</small>
-                      <strong>{participants.length}</strong>
-                      <span>Pseudonyma identifierare</span>
-                    </div>
-                    <div>
-                      <small>MÄTTID</small>
+                  <div className="overview-summary" aria-label="Sammanfattning">
+                    <span>
+                      <strong>{sessions.length}</strong> sessioner
+                    </span>
+                    <span>
+                      <strong>{participants.length}</strong> deltagare
+                    </span>
+                    <span>
                       <strong>
                         {Math.round(
                           sessions.reduce((a, s) => a + s.durationMs, 0) /
                             60000,
                         )}
-                        <em>min</em>
-                      </strong>
-                      <span>Summerad sessionslängd</span>
+                      </strong>{" "}
+                      min mättid
+                    </span>
+                  </div>
+                  <section className="overview-sessions">
+                    <div className="section-title">
+                      <h2>Senaste sessioner</h2>
+                      <button
+                        className="quiet-button"
+                        onClick={() => setView("Sessioner")}
+                      >
+                        Visa alla <ArrowRightIcon />
+                      </button>
                     </div>
-                  </div>
-                  <div className="section-title">
-                    <h2>Senaste sessioner</h2>
-                    <button onClick={() => setView("Sessioner")}>
-                      Visa alla <ArrowRightIcon />
+                    <div className="recent-list">
+                      {[...sessions]
+                        .sort((a, b) => b.startedAt - a.startedAt)
+                        .slice(0, 4)
+                        .map((s) => (
+                          <article key={s.id}>
+                            <div className="recent-participant">
+                              {s.participantLabel}
+                            </div>
+                            <div className="recent-info">
+                              <button
+                                className="text-button"
+                                onClick={() => {
+                                  setDetail(s);
+                                  setView("Sessioner");
+                                }}
+                              >
+                                {s.title}
+                              </button>
+                              <p>
+                                {new Date(s.startedAt).toLocaleDateString(
+                                  "sv-SE",
+                                  { day: "numeric", month: "short" },
+                                )}{" "}
+                                · {Math.round(s.durationMs / 60000)} min
+                                {s.demo ? " · Demo" : ""}
+                              </p>
+                            </div>
+                            <span className="recent-state">
+                              {s.state === "ended" ? "Avslutad" : "Pågår"}
+                            </span>
+                            <button
+                              className="quiet-button"
+                              aria-label={`Analysera ${s.title}`}
+                              onClick={() => compare([s])}
+                            >
+                              Analysera <ArrowRightIcon />
+                            </button>
+                          </article>
+                        ))}
+                    </div>
+                  </section>
+                  <section className="overview-next">
+                    <div>
+                      <h2>Se mönstret över tid</h2>
+                      <p>Öppna din analys för att jämföra mätningar.</p>
+                    </div>
+                    <button
+                      className="primary"
+                      onClick={() => setView("Analysyta")}
+                    >
+                      Öppna analys <ArrowRightIcon />
                     </button>
-                  </div>
-                  <SessionTable
-                    sessions={sessions.slice(0, 5)}
-                    onOpen={(s) => {
-                      setDetail(s);
-                      setView("Sessioner");
-                    }}
-                    onAnalyze={(s) => compare([s])}
-                  />
+                  </section>
                 </>
               )}
               {view === "Upplägg" && (
@@ -1202,7 +1283,7 @@ export default function Dashboard() {
         </main>
         <footer className="app-footer">
           <span>apexVIP · Forskningsplattform</span>
-          <span>Lokalt projekt / {user.workspace}</span>
+          <span>Din data, din arbetsyta</span>
         </footer>
       </div>
     </div>
@@ -1237,9 +1318,7 @@ function SessionTable({
                 <button className="text-button" onClick={() => onOpen(s)}>
                   {s.title}
                 </button>
-                <small>
-                  {s.participantLabel} · {s.typeId} v{s.typeVersion}
-                </small>
+                <small>{s.participantLabel}</small>
               </td>
               <td>
                 {new Date(s.startedAt).toLocaleString("sv-SE", {

@@ -2,6 +2,12 @@
 
 Första sammanhängande milstolpen är genomförd i ett nytt lokalt Git-repo, `apexVIP`, på grenen `main`. Repot är inte publicerat på GitHub. Originalrepos är bevarade: apex-web `7459997`, apex-mobile `5e933f8`.
 
+## Förenklad dashboard
+
+Startsidan visar en kort sammanfattning och de fyra senaste sessionerna. Upplägg och konfiguration ligger under Fler verktyg. Analysens redigering visas via Anpassa analys, medan tekniska sampleuppgifter finns under Datakvalitet. Ingen lagrad mätdata eller analysfunktion har tagits bort.
+
+Omdesignen har granskats på desktop och mobil. TypeScript, produktionsbygge och två uppdaterade Playwright-tester passerade. Testerna kontrollerar också att startsidan håller extra verktyg hopfällda och att den smala vyn saknar horisontell sidöverströmning. [Ny översikt](dashboard-desktop.png) · [Mobil översikt](dashboard-mobile-web.png).
+
 ## Implementerat och kontrollerat
 
 - Validerat API → SQLite → sessionslista → analys, med 12 696 syntetiska samples genom den riktiga ingest-kedjan.

@@ -416,18 +416,22 @@ export default function Chart({
               {s.summary.mean?.toFixed(s.signal === "phoneacc" ? 2 : 1) ?? "—"}{" "}
               {signals[s.signal].unit}
             </strong>
-            <small>
-              medel · {s.summary.count.toLocaleString("sv-SE")} giltiga
-              råsamples
-            </small>
+            <small>Medelvärde</small>
           </span>
         ))}
-        <span className="summary-note">
-          Rådata · ingen interpolation
-          <br />
-          {series.reduce((a, s) => a + s.renderCount, 0)} renderpunkter
-          {panel.axis === "normalized" ? " · z = (x − μ) / σ" : ""}
-        </span>
+        <details className="chart-data-details">
+          <summary>Datakvalitet</summary>
+          <p>
+            {series
+              .reduce((a, s) => a + s.summary.count, 0)
+              .toLocaleString("sv-SE")}{" "}
+            giltiga samples · {series.reduce((a, s) => a + s.gaps.length, 0)}{" "}
+            luckor. Medelvärden gäller synligt intervall. Luckor fylls inte i.
+            {panel.axis === "normalized"
+              ? " Normalisering: z = (x − μ) / σ."
+              : ""}
+          </p>
+        </details>
       </div>
     </>
   );
