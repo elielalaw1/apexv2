@@ -25,3 +25,5 @@ Råsample: `signal`, `index`, `t` relativa ms, `receivedAt` Unix ms, valfritt `s
 Renderpunkter är första/sista/min/max per tidsbucket; statistik är SQL-beräkning på rådata. Populationsstandardavvikelse används för z-normalisering. Ett tomt fönster ger null-statistik, inte nollvärden. CSV-export innehåller rådata och dess källtid, inte normaliserade eller renderförenklade värden. Signalernas faktiska enheter följer kontraktet; analyskonfigurationen exporteras separat.
 
 `GET /api/sessions/:id/signals` ger tillgängliga signaler och råsampleantal. Samma arbetsytekontroll som series/raw gäller; saknad eller främmande session ger 404. Endpunkten används av signalväljare och HR-fallback.
+
+H10-signaler: `hr` (bpm), `rr` (ms), `ecg` (µV), `h10accx`, `h10accy`, `h10accz` och `h10acc` (mg). Magnituden är härledd; axlarna är råvärden inklusive gravitation. EKG/XYZ har ursprunglig PMD-nanosekundstid i `sensorTime`; det lagras som sträng. Samtliga signaler stöds av ingest, `/signals`, `/series`, `/raw` och CSV-export.

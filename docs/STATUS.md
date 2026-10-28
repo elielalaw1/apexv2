@@ -1,3 +1,11 @@
+# HR/RR/EKG/H10 XYZ — 28 oktober 2026
+
+Appen har nu livevärden för puls, RR, EKG, rå X/Y/Z och härledd accelerationsmagnitud, med begränsade förhandskurvor för EKG och magnitud. Alla sju signalerna sparas lokalt under en inspelning och synkas med samma kvitterade utkorg som tidigare. Lokala pass visar antal per signal. **View session on web** öppnar det synkade passet; webben visar samtliga signaler och rå-CSV.
+
+Native EKG/XYZ går i paket; nanosekundstider bevaras och differenser beräknas före omvandling till ms. SQLite skriver samples i fler-radsstatement. Buffertgräns och synligt stopp vid skrivproblem finns kvar. UI-förhandsvisning och råinsamling har separata uppdateringstakter.
+
+Verifierat: mobil- och webbtypkontroll, 13 Node-tester, webbproduktionsbygge och 8 Playwright-tester mot produktionsbygget. Native iOS Release är byggt, installerat och startat på fysisk iPhone 17 med godkänt LikeLab-team. Användaren rapporterade att alla riktiga H10-signaler får värden i förhandsvisningen. Ett komplett fysiskt inspelnings-/synkprov samt långtid, avbrott och bakgrund återstår. Inga riktiga mätdata läggs i Git.
+
 # Leveransförberedelse — 28 oktober 2026
 
 ## Uppdatering: fysisk installation genomförd

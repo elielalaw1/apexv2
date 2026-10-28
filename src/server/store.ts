@@ -1,5 +1,6 @@
 import {
   BatchSchema,
+  signals,
   LayoutSchema,
   Session,
   SignalKind,
@@ -228,13 +229,7 @@ export function readSeries(
       signal,
       before,
       after,
-      signal === "ecg"
-        ? 80
-        : signal === "h10acc"
-          ? 200
-          : signal === "phoneacc"
-            ? 1500
-            : 3500,
+      signals[signal].gapMs,
       from,
       to,
     ) as Series["gaps"];

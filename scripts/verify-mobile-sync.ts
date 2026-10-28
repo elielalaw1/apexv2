@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fullSignalCounts } from "../src/core/polarFixture";
 import { Session, Series } from "../src/core/contract";
 async function main() {
   const base = process.env.APEX_URL ?? "http://127.0.0.1:3003";
@@ -16,23 +17,29 @@ async function main() {
   const list = await fetch(`${base}/api/sessions`, { headers });
   assert.ok(list.ok);
   const sessions: Session[] = await list.json();
-  const found = sessions.filter((s) => s.source === "mobile-synthetic-v1");
+  const found = sessions.filter((s) =>
+    ["mobile-synthetic-v1", "mobile-synthetic-v2"].includes(s.source),
+  );
   assert.ok(found.length, "Synkronisera ett syntetiskt mobilpass först");
   for (const session of found) {
     assert.equal(session.demo, true);
-    for (const signal of ["hr", "rr"]) {
+    const expected =
+      session.source === "mobile-synthetic-v2"
+        ? fullSignalCounts
+        : { hr: 60, rr: 60 };
+    for (const [signal, count] of Object.entries(expected)) {
       const response = await fetch(
         `${base}/api/sessions/${session.id}/series?signal=${signal}`,
         { headers },
       );
       assert.ok(response.ok);
       const series: Series = await response.json();
-      assert.equal(series.rawCount, 60, `${session.id}/${signal}`);
-      assert.equal(series.summary.count, 60);
+      assert.equal(series.rawCount, count, `${session.id}/${signal}`);
+      assert.equal(series.summary.count, count);
     }
   }
   console.log(
-    `${found.length} syntetiska mobilpass verifierade via API: exakt 60 HR + 60 RR per pass.`,
+    `${found.length} syntetiska mobilpass verifierade via API: alla förväntade signaler och sampleantal stämmer.`,
   );
   await fetch(`${base}/api/auth/logout`, {
     method: "POST",

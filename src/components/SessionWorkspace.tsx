@@ -40,7 +40,11 @@ const signalHelp: Record<SignalKind, string> = {
   hr: "Heartbeats per minute (bpm). Follow how heart rate changes during the session.",
   rr: "Time between consecutive heartbeats, measured in milliseconds (ms).",
   phoneacc: "Movement recorded by the phone’s accelerometer, measured in g.",
-  h10acc: "Movement recorded by the H10 accelerometer, measured in mg.",
+  h10acc:
+    "Magnitude √(X² + Y² + Z²) of H10 acceleration, in mg, including gravity. Raw axes are available separately.",
+  h10accx: "Raw H10 acceleration along the X axis, in mg, including gravity.",
+  h10accy: "Raw H10 acceleration along the Y axis, in mg, including gravity.",
+  h10accz: "Raw H10 acceleration along the Z axis, in mg, including gravity.",
   ecg: "Electrical activity of the heart, measured in microvolts (µV).",
 };
 function requestedSession() {

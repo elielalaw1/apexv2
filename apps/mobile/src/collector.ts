@@ -3,14 +3,16 @@ import { randomUUID } from "expo-crypto";
 import {
   Session,
   Sample,
-  SampleSchema,
   defaultTemplate,
   Template,
 } from "../../../src/core/contract";
+import { PolarSamples } from "../../../src/core/polarSamples";
+import { stopStreams, startPreview } from "./livePolar";
 import { SampleWriter, saveSession, seal, saveLocalTemplate } from "./storage";
 let session: Session | null = null,
   writer: SampleWriter | null = null,
-  indices = { hr: 0, rr: 0 },
+  converter: PolarSamples | null = null,
+  lastSampleTime = 0,
   workspace = "",
   subs: { remove: () => void }[] = [],
   lastContact = true,
@@ -21,6 +23,7 @@ export function snapshot() {
   return {
     session,
     persisted: writer?.persisted ?? 0,
+    buffered: writer?.buffered ?? 0,
     error: fatalError ?? writer?.error,
     contact: lastContact,
   };
@@ -38,14 +41,20 @@ export async function start(
     );
   const state = await Polar.getConnectionState();
   if (!state.isConnected) throw Error("Connect Polar H10 first");
+  if (!state.hrReady || !state.streamingReady)
+    throw Error(
+      "Wait for H10 signal services to become ready, then try again.",
+    );
   await saveLocalTemplate(ws, template);
   workspace = ws;
-  indices = { hr: 0, rr: 0 };
+  converter = new PolarSamples(Date.now());
+  lastSampleTime = 0;
   closing = false;
   fatalError = null;
   lastContact = true;
   activeTemplate = structuredClone(template);
   const now = Date.now();
+  converter = new PolarSamples(now);
   const created: Session = {
     id: randomUUID(),
     participantId: participant,
@@ -57,7 +66,7 @@ export async function start(
     durationMs: 1,
     demo: false,
     source: `polar-h10:${state.id}`,
-    timePolicy: "receipt-relative-v1",
+    timePolicy: "sensor-relative-v1",
     state: "recording",
     events: template.questions
       .filter((q) => q.phase === "pre")
@@ -76,42 +85,30 @@ export async function start(
   session = created;
   writer = new SampleWriter(created.id);
   let wasConnected = true;
-  function add(
-    signal: "hr" | "rr",
-    value: number,
-    timestamp: string,
-    rrOffsetMs = 0,
-  ) {
+  function add(read: () => Sample[]) {
     if (!session || !writer || closing) return;
-    const receivedAt = Date.parse(timestamp);
-    const t = Math.max(0, receivedAt - session.startedAt + rrOffsetMs);
-    const s: Sample = {
-      signal,
-      value,
-      index: indices[signal]++,
-      t,
-      receivedAt,
-      quality:
-        lastContact && (signal === "hr" ? value > 0 && value <= 300 : value > 0)
-          ? "measured"
-          : "suspect",
-    };
     try {
-      writer.append(SampleSchema.parse(s));
+      for (const sample of read()) {
+        writer.append(sample);
+        lastSampleTime = Math.max(lastSampleTime, sample.t);
+      }
     } catch (e) {
       fatalError = e instanceof Error ? e.message : "Recording stopped";
       closing = true;
-      void Polar?.stopHeartRateStream();
-      void Polar?.stopRRStream();
+      void stopStreams();
     }
   }
   subs = [
     Polar.addListener("heartRateSampleReceived", (s) => {
       lastContact = !s.contactSupported || s.contactDetected;
-      add("hr", s.bpm, s.timestamp);
+      add(() => converter!.hr(s.bpm, s.timestamp, lastContact));
     }),
     Polar.addListener("rrSampleReceived", (s) =>
-      add("rr", s.rrMs, s.timestamp, s.rrOffsetMs ?? 0),
+      add(() => converter!.rr(s.rrMs, s.timestamp, s.rrOffsetMs ?? 0)),
+    ),
+    Polar.addListener("ecgBatchReceived", (s) => add(() => converter!.ecg(s))),
+    Polar.addListener("accelerometerBatchReceived", (s) =>
+      add(() => converter!.acc(s)),
     ),
     Polar.addListener("connectionStateChanged", (s) => {
       if (session && !closing && s.isConnected !== wasConnected) {
@@ -120,8 +117,7 @@ export async function start(
           fatalError =
             "Too many connection interruptions. Finish and save the session.";
           closing = true;
-          void Polar?.stopHeartRateStream();
-          void Polar?.stopRRStream();
+          void stopStreams();
           return;
         }
         session.events.push({
@@ -139,22 +135,16 @@ export async function start(
         ).catch((e) => {
           fatalError = e.message;
         });
-        if (s.isConnected)
-          void (async () => {
-            try {
-              await Polar?.startHeartRateStream();
-              await Polar?.startRRStream();
-            } catch (e) {
-              fatalError =
-                e instanceof Error ? e.message : "Reconnection failed";
-            }
-          })();
+        converter?.resetClock();
       }
+      if (session && !closing && s.isConnected)
+        void startPreview().catch((e) => {
+          fatalError = e instanceof Error ? e.message : "Reconnection failed";
+        });
     }),
   ];
   try {
-    await Polar.startHeartRateStream();
-    await Polar.startRRStream();
+    await startPreview();
   } catch (e) {
     await finish({});
     throw e;
@@ -175,11 +165,8 @@ export async function event(label: string) {
 }
 export async function finish(answers: Record<string, number>) {
   if (!session || !writer) return;
-  await Promise.allSettled([
-    Polar?.stopHeartRateStream(),
-    Polar?.stopRRStream(),
-  ]);
   closing = true;
+  await stopStreams();
   subs.forEach((s) => s.remove());
   subs = [];
   await writer.close();
@@ -188,7 +175,7 @@ export async function finish(answers: Record<string, number>) {
     session = {
       ...recording,
       state: "ended",
-      durationMs: Math.max(1, Date.now() - recording.startedAt),
+      durationMs: Math.max(1, Date.now() - recording.startedAt, lastSampleTime),
       events: [
         ...recording.events,
         ...activeTemplate.questions

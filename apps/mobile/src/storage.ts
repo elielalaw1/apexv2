@@ -126,6 +126,10 @@ export async function acknowledge(id: string) {
 export async function counts(id: string) {
   const d = await db();
   return {
+    signals: await d.getAllAsync<{ signal: string; count: number }>(
+      "SELECT signal,COUNT(*) count FROM local_samples WHERE session_id=? GROUP BY signal ORDER BY signal",
+      id,
+    ),
     samples:
       (
         await d.getFirstAsync<{ n: number }>(
@@ -174,6 +178,9 @@ export class SampleWriter {
   private timer: ReturnType<typeof setInterval>;
   public error: string | null = null;
   public persisted = 0;
+  get buffered() {
+    return this.buffer.length;
+  }
   constructor(private id: string) {
     this.timer = setInterval(() => {
       void this.flush().catch(() => {});
@@ -196,14 +203,19 @@ export class SampleWriter {
       try {
         const d = await db();
         await d.withExclusiveTransactionAsync(async (tx) => {
-          for (const s of part)
+          // Batch SQL statements keep high-rate ECG + XYZ off the per-row bridge.
+          for (let i = 0; i < part.length; i += 100) {
+            const chunk = part.slice(i, i + 100);
             await tx.runAsync(
-              "INSERT INTO local_samples VALUES(?,?,?,?)",
-              this.id,
-              s.signal,
-              s.index,
-              JSON.stringify(s),
+              `INSERT INTO local_samples VALUES ${chunk.map(() => "(?,?,?,?)").join(",")}`,
+              chunk.flatMap((s) => [
+                this.id,
+                s.signal,
+                s.index,
+                JSON.stringify(s),
+              ]),
             );
+          }
         });
         this.buffer.splice(0, part.length);
         this.persisted += part.length;

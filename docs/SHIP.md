@@ -1,6 +1,6 @@
 # APEX: installation, telefonprov och leverans
 
-Detta repo innehåller webb/API och en iOS-app med Polar H10-brygga. Den första leveransen är en lokal pilot för HR/RR. GitHub-publicering är källkodsleverans; den installerar inte appen hos andra och driftsätter inte servern.
+Detta repo innehåller webb/API och en iOS-app med Polar H10-brygga. Den första leveransen är en lokal pilot för HR/RR/EKG/H10 XYZ. GitHub-publicering är källkodsleverans; den installerar inte appen hos andra och driftsätter inte servern.
 
 ## Från en ny Mac
 
@@ -37,10 +37,10 @@ Använd ett nytt pseudonymt test-ID. Notera telefonmodell, iOS, appens Git-commi
 | Prov | Förväntat resultat | Resultat |
 | --- | --- | --- |
 | Öppna app, logga in | Inget kraschfel, rätt server | Ej genomfört |
-| Skapa syntetiskt testpass | 60 HR + 60 RR lagras | Ej genomfört |
+| Skapa syntetiskt testpass | 60 HR + 60 RR, 650 EKG och 1000 samples per accelerationssignal lagras | Ej genomfört |
 | Avsluta och öppna app före synk | Passet och väntande paket finns kvar | Ej genomfört |
 | Synk och öppna i webben | Serverkvittens, samma pass i sessionslistan | Ej genomfört |
-| `npm run test:mobile-api` i repots rot | Exakt 60 HR + 60 RR i syntetiskt pass | Ej genomfört |
+| `npm run test:mobile-api` i repots rot | Förväntade sampleantal för alla syntetiska signaler | Ej genomfört |
 | Anslut H10 och spela in 2 minuter | Levande HR/RR, före-/eftersvar och händelser sparas | Ej genomfört |
 | Synk av H10-pass och CSV | Rätt deltagare, tid, signaler och inga dubletter | Ej genomfört |
 | Nätverk av vid synk, sedan på och försök igen | Paket finns kvar tills kvittens, inga dubletter | Ej genomfört |
@@ -63,7 +63,7 @@ APEX_E2E_PRODUCTION=1 APEX_E2E_PORT=3004 npm run test:e2e
 
 För TestFlight behövs Apple Developer Program, ett App Store Connect-appobjekt, distributionssignering och ett uppladdat arkiv. En gemensam HTTPS-server måste ersätta Macens LAN-adress. Webbens SQLite-fil behöver beständig disk och en verifierad backup-/återställningsrutin.
 
-Innan riktiga deltagardata: ersätt demoinloggning och provisionera användare, inför roller, lämpligt skydd för lagring och transport, retention samt begränsning av inloggningsförsök. Granska mobilberoenden och kör belastningstest. Följ [status](STATUS.md) för öppna begränsningar. HR/RR är pilotens scope; ECG, H10-råacceleration och Android är inte färdigverifierade.
+Innan riktiga deltagardata: ersätt demoinloggning och provisionera användare, inför roller, lämpligt skydd för lagring och transport, retention samt begränsning av inloggningsförsök. Granska mobilberoenden och kör belastningstest. Följ [status](STATUS.md) för öppna begränsningar. HR/RR/EKG/H10 XYZ ingår i iOS-piloten. Långa pass, bakgrund och Android är inte färdigverifierade.
 
 ## GitHub-hygien
 

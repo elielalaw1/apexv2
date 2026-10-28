@@ -1,1 +1,13 @@
-{"extends":"expo/tsconfig.base","compilerOptions":{"strict":true},"include":["index.ts","App.tsx","src/**/*.ts","modules/**/*.ts","modules/**/*.tsx","../../src/core/contract.ts"]}
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": { "strict": true },
+  "include": [
+    "index.ts",
+    "App.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "modules/**/*.ts",
+    "modules/**/*.tsx",
+    "../../src/core/contract.ts"
+  ]
+}

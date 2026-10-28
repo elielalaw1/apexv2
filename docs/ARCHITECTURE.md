@@ -11,3 +11,11 @@ Tid: `t` är analysens relativa millisekunder, `receivedAt` UTC-mottagningstid, 
 Webbserier hämtas per tidsfönster. SQL väljer första/sista/min/max per tidsbucket, högst ungefär 900 renderpunkter per serie. Statistik kommer från samtliga giltiga råsamples i fönstret, aldrig renderpunkterna. Luckor beräknas på rådata. Normalisering använder råfönstrets medel och populationsstandardavvikelse och påverkar enbart visningen. Råexport är paginerad. Lucktrösklar och metodversioner finns i kontrakt/analys; inga interpolerade mätningar skapas.
 
 Officiella referenser: [Expo SQLite SDK54](https://docs.expo.dev/versions/v54.0.0/sdk/sqlite/), [Polar H10](https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/products/PolarH10.md), [Polar tidssystem](https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/TimeSystemExplained.md). Återanvänd bryggan på SDK6.16; modern dokumentation bevisar inte att fysisk enhet fungerar.
+
+## H10-signaler — 28 oktober 2026
+
+HR/RR, EKG och råa accelerationsaxlar är kopplade till samma beständiga insamlings- och synkkedja. `h10accx/y/z` bevarar signerade mg inklusive gravitation; `h10acc` är den härledda magnituden √(X²+Y²+Z²). Gamla sessionssignaler fungerar fortsatt. Ingen databasmigration behövs eftersom signalnycklar lagras som text.
+
+Nya H10-pass använder `sensor-relative-v1`: PMD-strömmarna EKG och acceleration delar en källklocka, förankrad vid den första mottagna paketets sista sensortid. Nanosekundsdifferenser beräknas med BigInt före omvandling till millisekunder; ursprunglig `sensorTime` sparas ordagrant. HR/RR saknar PMD-klocka och använder fortsatt mottagningstid samt RR-offset. Metoden garanterar inte exakt fysisk synkronisering mellan HR/RR och PMD eller mellan olika enheter. Vid återanslutning återförankras sensorklockan och avbrottet markeras.
+
+Native-bryggan skickar EKG/XYZ i paket, inte en Expo-händelse per sample. Lokal SQL skriver högst 100 rader per statement i en 500-samplestransaktion; bufferten förblir begränsad till 1000 samples. UI uppdateras högst fyra gånger per sekund med en begränsad kurvförhandsvisning, medan råinsamlingen sparar varje mottaget sample inom inspelningstiden. En skriv-/buffertgräns ger synligt stopp, aldrig tyst obegränsad buffring. Förhandsvisning före Start sparas inte.

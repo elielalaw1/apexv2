@@ -12,6 +12,8 @@ public final class ApexPolarModule: Module {
       "heartRateSampleReceived",
       "rrSampleReceived",
       "ecgSampleReceived",
+      "ecgBatchReceived",
+      "accelerometerBatchReceived",
       "polarAccelerometerSampleReceived",
       "nativeError"
     )

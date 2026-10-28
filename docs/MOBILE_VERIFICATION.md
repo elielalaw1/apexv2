@@ -49,3 +49,11 @@ Följande är en testplan, inte ett påstående om genomförda hårdvarutester.
 10. Gör en separat Android-matris för behörighet, anslutning, RR-tid, avbrott och bakgrund. Android har ännu ingen fysisk verifiering och återanvänd brygga saknar nya iOS-RR-offseten.
 
 ECG130Hz och H10-acceleration: efterföljande milstolpe med bevarande av rå XYZ, källkoordinater och original-sensortid, chunkning, samtidiga strömmar och högfrekvensprestanda. Telefonrörelse i webbens demo är syntetisk amplitud i g, inte H10-rörelse eller faktisk telefoninsamling.
+
+## Full signalinsamling — 28 oktober 2026
+
+Release-bygget med EKG/XYZ är byggt, installerat och startat på fysisk iPhone 17. Användaren rapporterade att puls, RR, EKG och X/Y/Z får värden från ett riktigt H10-band i Signal preview. Detta är observation av mottagning, inte ett färdigt långtids-/bakgrundsprov.
+
+13 Node-tester passerar inklusive exakt PMD-tid, signerade XYZ, råexport och idempotent återförsök. 8 Playwright-tester passerar mot produktionsbygget, inklusive uppladdning, passvy för alla sju signalerna och CSV med alla 4770 syntetiska samples. Mobil- och webbtypkontroll samt native Release-bygge är godkända. Det syntetiska transportprovet och dess XCTest förväntar nu 4770 samples; den nya XCTest-varianten är ännu inte körd.
+
+Den första kompletta fysiska inspelningen med efterföljande synk återstår att bekräfta. Tids-/avbrotts-, 30-minuters-, omstarts- och bakgrundsproven ovan kvarstår också. EKG/XYZ-kedjan är nu implementerad; den tidigare beskrivningen av den som nästa milstolpe ovan är historik.

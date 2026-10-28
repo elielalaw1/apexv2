@@ -1,6 +1,6 @@
 # APEX på en fysisk iPhone
 
-App: `apps/mobile`. Första mätningen omfattar puls (HR) och RR-intervall från Polar H10. Passet sparas lokalt och skickas manuellt till samma API och databas som webbens sessionslista. Fysisk H10-insamling är ännu inte verifierad.
+App: `apps/mobile`. Mätningen omfattar puls (HR), RR-intervall, EKG och H10-accelerationens råa X/Y/Z samt magnitud. Passet sparas lokalt och skickas manuellt till samma API och databas som webbens sessionslista. Samtliga signaler har observerats i appens förhandsvisning på fysisk iPhone; ett fullständigt inspelnings-/synkprov verifieras separat.
 
 ## 1. Gör Macens server tillgänglig
 
@@ -48,13 +48,13 @@ För ett bygge som kan startas utan Metro, kör `npm run ios -- --device --confi
 2. Ange Macens serveradress och logga in på samma konto som webben. Det syntetiska utvecklingskontot är `demo@apexvip.local` / `apex-demo-2026`.
 3. Ange ett deltagar-ID, till exempel `P-001`.
 4. Fukta H10-bandets elektroder, sätt på bandet och välj **Find Polar H10**. Stäng andra appar som håller bandets Bluetooth-anslutning om bandet inte blir tillgängligt.
-5. Anslut bandet och kontrollera att puls visas, RR finns tillgängligt och kontakten är god.
-6. Fyll i förefrågorna och välj **Start HR/RR recording**. Håll appen öppen vid första testet.
+5. Anslut bandet, vänta på **H10 streaming services ready** och kontrollera puls, RR, EKG och X/Y/Z i **Signal preview**. Kontakt ska vara god. Förhandsvisning sparas inte som ett pass.
+6. Fyll i förefrågorna och välj **Start recording**. Håll appen öppen vid första testet.
 7. Spela in 1–2 minuter, fyll i efterfrågorna och välj **Finish and save recording**.
 8. Välj **Sync pending batches**. Passet ska visa **Synced to server** efter serverkvittens.
-9. Välj **Refresh** i webbens sessionslista och öppna passet. Kontrollera HR, RR, händelser, självskattningar och CSV.
+9. Välj **View session on web** i appen eller **Refresh** i webbens sessionslista och öppna passet. Kontrollera HR, RR, EKG, H10 X/Y/Z, händelser, självskattningar och CSV.
 
-Fortsätt sedan med avbrott, längre pass och låst skärm enligt [mobiltestplanen](MOBILE_VERIFICATION.md). Simulatorprovet visar lagring och synk, men bevisar inte Bluetooth eller insamling i bakgrunden. Telefonrörelse i nuvarande webbdemo är syntetisk; den här mobilversionen samlar HR/RR.
+Fortsätt sedan med avbrott, längre pass och låst skärm enligt [mobiltestplanen](MOBILE_VERIFICATION.md). Simulatorprovet visar lagring och synk, men bevisar inte Bluetooth eller insamling i bakgrunden. Telefonrörelse i nuvarande webbdemo är syntetisk; den här mobilversionen samlar HR/RR/EKG/H10 XYZ.
 
 ## Status för förberedelsen
 

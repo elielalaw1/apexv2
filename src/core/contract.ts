@@ -1,5 +1,14 @@
 import { z } from "zod";
-export const signalKinds = ["hr", "rr", "ecg", "h10acc", "phoneacc"] as const;
+export const signalKinds = [
+  "hr",
+  "rr",
+  "ecg",
+  "h10acc",
+  "h10accx",
+  "h10accy",
+  "h10accz",
+  "phoneacc",
+] as const;
 export type SignalKind = (typeof signalKinds)[number];
 export const signals: Record<
   SignalKind,
@@ -12,6 +21,24 @@ export const signals: Record<
     name: "H10 acceleration",
     unit: "mg",
     color: "#4a7097",
+    gapMs: 200,
+  },
+  h10accx: {
+    name: "H10 acceleration X",
+    unit: "mg",
+    color: "#4a7097",
+    gapMs: 200,
+  },
+  h10accy: {
+    name: "H10 acceleration Y",
+    unit: "mg",
+    color: "#8b6941",
+    gapMs: 200,
+  },
+  h10accz: {
+    name: "H10 acceleration Z",
+    unit: "mg",
+    color: "#7863a0",
     gapMs: 200,
   },
   phoneacc: {

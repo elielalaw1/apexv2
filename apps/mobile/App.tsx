@@ -5,6 +5,7 @@ import {
   AppState,
   PermissionsAndroid,
   Platform,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,7 +18,13 @@ import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import { randomUUID } from "expo-crypto";
 import Polar, { PolarConnectionStatePayload } from "./modules/apex-polar";
-import { Session, Template, defaultTemplate } from "../../src/core/contract";
+import {
+  Session,
+  Template,
+  defaultTemplate,
+  signals,
+  SignalKind,
+} from "../../src/core/contract";
 import { displayText } from "../../src/core/presentation";
 import { start, event, finish, snapshot } from "./src/collector";
 import {
@@ -30,6 +37,14 @@ import {
   saveLocalTemplate,
   localTemplates,
 } from "./src/storage";
+import { fullSignalFixture } from "../../src/core/polarFixture";
+import LiveSignals from "./src/LiveSignals";
+import {
+  observePolar,
+  liveSnapshot,
+  startPreview,
+  stopStreams,
+} from "./src/livePolar";
 import { request, synchronize } from "./src/sync";
 type Account = { token: string; workspace: string; server: string };
 function Button({
@@ -88,6 +103,7 @@ export default function App() {
     rrAvailable: boolean;
   } | null>(null);
   const [preview, setPreview] = useState(previewRef.current);
+  const [live, setLive] = useState(liveSnapshot());
   const [account, setAccount] = useState<Account | null>(null),
     [server, setServer] = useState(
       process.env.EXPO_PUBLIC_APEX_SERVER_URL ?? "http://127.0.0.1:3003",
@@ -106,7 +122,13 @@ export default function App() {
     ),
     [current, setCurrent] = useState(snapshot()),
     [rows, setRows] = useState<
-      { session: Session; sealed: number; samples: number; pending: number }[]
+      {
+        session: Session;
+        sealed: number;
+        samples: number;
+        pending: number;
+        signals: { signal: string; count: number }[];
+      }[]
     >([]),
     [templates, setTemplates] = useState<Template[]>([defaultTemplate]),
     [template, setTemplate] = useState(defaultTemplate);
@@ -149,15 +171,14 @@ export default function App() {
         }
       })
       .catch((e) => setMessage(e.message));
+    const stopObserving = observePolar();
     const subs = Polar
       ? [
           Polar.addListener("connectionStateChanged", (s) => {
             setConnection(s);
             if (!s.isConnected) previewRef.current = null;
             if (s.isConnected && !snapshot().session)
-              void Polar?.startHeartRateStream().catch((e) =>
-                setMessage(e.message),
-              );
+              void startPreview().catch((e) => setMessage(e.message));
           }),
           Polar.addListener("heartRateSampleReceived", (s) => {
             previewRef.current = s;
@@ -169,11 +190,16 @@ export default function App() {
           Polar.addListener("nativeError", (e) => setMessage(e.message)),
         ]
       : [];
-    void Polar?.getConnectionState().then(setConnection);
+    void Polar?.getConnectionState().then((s) => {
+      setConnection(s);
+      if (s.isConnected)
+        void startPreview().catch((e) => setMessage(e.message));
+    });
     const timer = setInterval(() => {
       setCurrent(snapshot());
       setPreview(previewRef.current);
-    }, 1000);
+      setLive(liveSnapshot());
+    }, 250);
     const app = AppState.addEventListener("change", (state) => {
       if (state !== "active" && snapshot().session)
         setMessage(
@@ -181,6 +207,7 @@ export default function App() {
         );
     });
     return () => {
+      stopObserving();
       subs.forEach((s) => s.remove());
       clearInterval(timer);
       app.remove();
@@ -266,13 +293,13 @@ export default function App() {
           id: randomUUID(),
           participantId: participant,
           participantLabel: participant,
-          title: "Synthetic mobile session",
+          title: "Synthetic full-signal mobile session",
           typeId: template.id,
           typeVersion: template.version,
           startedAt: now,
           durationMs: 60000,
           demo: true,
-          source: "mobile-synthetic-v1",
+          source: "mobile-synthetic-v2",
           timePolicy: "receipt-relative-v1",
           state: "ended",
           events: [
@@ -282,23 +309,9 @@ export default function App() {
       await saveLocalTemplate(account.workspace, template);
       await saveSession(s, account.workspace);
       const writer = new SampleWriter(s.id);
-      for (let n = 0; n < 60; n++) {
-        writer.append({
-          signal: "hr",
-          index: n,
-          t: n * 1000,
-          receivedAt: now + n * 1000,
-          value: 100 + 20 * Math.sin(n / 8),
-          quality: "measured",
-        });
-        writer.append({
-          signal: "rr",
-          index: n,
-          t: n * 1000,
-          receivedAt: now + n * 1000,
-          value: 60000 / (100 + 20 * Math.sin(n / 8)),
-          quality: "measured",
-        });
+      for (const sample of fullSignalFixture(now)) {
+        writer.append(sample);
+        if (writer.buffered >= 500) await writer.flush();
       }
       await writer.close();
       await seal(s, account.workspace);
@@ -327,7 +340,8 @@ export default function App() {
             {current.session ? "Recording in progress" : "Ready to record."}
           </Text>
           <Text style={styles.subtitle}>
-            Heart rate and RR. Saved locally, then synced to your workspace.
+            Heart rate, RR, ECG and H10 movement. Saved locally, then synced to
+            your workspace.
           </Text>
           {message !== "" && (
             <View accessibilityRole="alert" style={styles.notice}>
@@ -442,6 +456,27 @@ export default function App() {
                           : "Waiting for the first HR packet to check contact…"}
                       </Text>
                     )}
+                    {connection?.isConnected && (
+                      <>
+                        <Text style={styles.hint}>
+                          {connection.streamingReady
+                            ? "H10 streaming services ready"
+                            : "Preparing H10 signal services…"}
+                        </Text>
+                        <LiveSignals data={live} recording={false} />
+                        <Button
+                          title="Restart signal preview"
+                          secondary
+                          disabled={busy}
+                          onPress={() =>
+                            void act(async () => {
+                              await stopStreams();
+                              await startPreview();
+                            })
+                          }
+                        />
+                      </>
+                    )}
                     {connection?.discoveredDevices.map((d) => (
                       <Button
                         title={`Connect ${d.name} · ${d.id}`}
@@ -487,10 +522,12 @@ export default function App() {
                         </View>
                       ))}
                     <Button
-                      title="Start HR/RR recording"
+                      title="Start recording"
                       disabled={
                         busy ||
                         !connection?.isConnected ||
+                        !connection.hrReady ||
+                        !connection.streamingReady ||
                         !!(
                           preview?.contactSupported && !preview.contactDetected
                         )
@@ -553,12 +590,13 @@ export default function App() {
                     />
                   )}
                   <Text style={styles.hint}>
-                    {current.persisted} samples saved to storage · Contact{" "}
-                    {current.contact ? "good" : "uncertain"}
+                    {current.persisted} samples saved · {current.buffered}{" "}
+                    buffered · Contact {current.contact ? "good" : "uncertain"}
                   </Text>
                   {current.error && (
                     <Text style={styles.error}>{current.error}</Text>
                   )}
+                  <LiveSignals data={live} recording />
                   <View style={styles.chips}>
                     {template.eventLabels.map((label) => (
                       <Button
@@ -630,6 +668,28 @@ export default function App() {
                           ? `${r.pending} pending batches`
                           : "Synced to server"}
                     </Text>
+                    <Text style={styles.hint}>
+                      {r.signals
+                        .map(
+                          (s) =>
+                            `${signals[s.signal as SignalKind]?.name ?? s.signal}: ${s.count}`,
+                        )
+                        .join(" · ")}
+                    </Text>
+                    {!!r.sealed && r.pending === 0 && (
+                      <Button
+                        title="View session on web"
+                        secondary
+                        disabled={busy}
+                        onPress={() =>
+                          void act(async () => {
+                            await Linking.openURL(
+                              `${account.server}/?session=${encodeURIComponent(r.session.id)}`,
+                            );
+                          })
+                        }
+                      />
+                    )}
                     {!r.sealed && r.session.id !== current.session?.id && (
                       <Button
                         title="Recover interrupted session"
@@ -650,7 +710,7 @@ export default function App() {
                 ))}
                 <Button
                   title="Sync pending batches"
-                  disabled={busy}
+                  disabled={busy || !!current.session}
                   onPress={() =>
                     void act(async () => {
                       const n = await synchronize(
@@ -695,7 +755,7 @@ export default function App() {
                         "Signed out locally. Could not revoke the server session without a connection.",
                       );
                     }
-                    await Polar?.stopHeartRateStream();
+                    await stopStreams();
                     await SecureStore.deleteItemAsync("apex-account");
                     setAccount(null);
                     setRows([]);
@@ -706,8 +766,8 @@ export default function App() {
           )}
           {busy && <ActivityIndicator color="#2b766b" style={{ margin: 12 }} />}
           <Text style={styles.footer}>
-            apexVIP / Local recording · HR + RR{"\n"}ECG and H10 motion are
-            planned milestones.
+            apexVIP / Local recording · HR + RR + ECG + H10 XYZ{"\n"}Finish →
+            sync → open the session on web.
           </Text>
         </ScrollView>
       </SafeAreaView>

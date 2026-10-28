@@ -2,7 +2,7 @@
 
 [Installation, telefonprov och leverans](docs/SHIP.md) · [Installera på iPhone](docs/IPHONE_SETUP.md)
 
-En ny, separat APEX-kodbas för mätning och analys. Webbens första sammanhängande milstolpe är byggd med ett riktigt API och lokal SQLite. Expo-appen har en HR/RR-kedja, beständig utkorg och återanvänder den tidigare Polar-bryggan.
+En ny, separat APEX-kodbas för mätning och analys. Webbens första sammanhängande milstolpe är byggd med ett riktigt API och lokal SQLite. Expo-appen har insamling av HR, RR, EKG och H10-acceleration (rå XYZ och magnitud), beständig utkorg och återanvänder den tidigare Polar-bryggan.
 
 ## Starta webben
 
@@ -71,11 +71,11 @@ npm run ios
 
 En **development build** krävs; Polar-bryggan finns inte i Expo Go. iOS är första målplattform. Ange en HTTPS-server eller Macens LAN-adress på fysisk telefon. Webben binds lokalt som standard; för LAN-utveckling kan den startas med `npx next dev --hostname 0.0.0.0 --port 3003`.
 
-Flöde: logga in → pseudonym deltagare → sessionsupplägg → anslut H10 → föreformulär → HR/RR → händelser → efterformulär → töm buffert → paketutkorg → serverkvittens. Bufferten skrivs var 250 ms eller vid 500 samples och har en hård gräns på 1000. UI visar endast aktuell status. Avslutade sessioner packas transaktionellt i paket om högst 500 samples. Ett fel eller en förlorad kvittens lämnar samma paket väntande för nästa försök; lokala rådata raderas inte.
+Flöde: logga in → pseudonym deltagare → sessionsupplägg → anslut H10 → föreformulär → HR/RR/EKG/XYZ → händelser → efterformulär → töm buffert → paketutkorg → serverkvittens. Bufferten skrivs var 250 ms eller vid 500 samples och har en hård gräns på 1000. UI visar endast aktuell status. Avslutade sessioner packas transaktionellt i paket om högst 500 samples. Ett fel eller en förlorad kvittens lämnar samma paket väntande för nästa försök; lokala rådata raderas inte.
 
 Återställning efter omstart säkrar redan beständiga samples och markerar avbrottet. Den sista ej skrivna minnesbufferten kan ha gått förlorad. Synk är manuell i denna version och startar efter avslut. API:t kan ta delpaket men en fullständig liveplattform är inte byggd.
 
-Det finns ett syntetiskt mobilpass för att kontrollera lagring och överföring. Simulator/bundlekontroller är inte H10-test. Låst skärm, bakgrund, radiosignalavbrott och Android måste verifieras separat. ECG/H10-rörelsens råa vektorkedja är nästa milstolpe; signalnamnen i kontraktet är förberedelser.
+Det finns ett syntetiskt mobilpass för att kontrollera lagring och överföring. Simulator/bundlekontroller är inte H10-test. Låst skärm, bakgrund, radiosignalavbrott och Android måste verifieras separat. EKG och H10-råaxlar ingår nu i insamling, lagring och synk; långvarig samtidig högfrekvensinsamling måste fortfarande kapacitetstestas.
 
 ## Kontroller
 

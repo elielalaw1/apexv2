@@ -1,9 +1,5 @@
 export type PolarConnectionState =
-  | 'disconnected'
-  | 'scanning'
-  | 'connecting'
-  | 'connected'
-  | 'error';
+  "disconnected" | "scanning" | "connecting" | "connected" | "error";
 
 export type PolarDevicePayload = {
   id: string;
@@ -22,6 +18,8 @@ export type PolarConnectionStatePayload = {
   lastError?: string;
   discoveredDevices: PolarDevicePayload[];
   nativeAvailable: boolean;
+  hrReady?: boolean;
+  streamingReady?: boolean;
 };
 
 export type PolarHeartRateSamplePayload = {
@@ -67,7 +65,17 @@ export type ApexPolarModuleEvents = {
   heartRateSampleReceived: (payload: PolarHeartRateSamplePayload) => void;
   rrSampleReceived: (payload: PolarRRSamplePayload) => void;
   ecgSampleReceived: (payload: PolarECGSamplePayload) => void;
-  polarAccelerometerSampleReceived: (payload: PolarAccelerometerSamplePayload) => void;
+  polarAccelerometerSampleReceived: (
+    payload: PolarAccelerometerSamplePayload,
+  ) => void;
+  ecgBatchReceived: (payload: {
+    receivedAt: number;
+    samples: { microVolts: number; sourceTimestamp: string }[];
+  }) => void;
+  accelerometerBatchReceived: (payload: {
+    receivedAt: number;
+    samples: { x: number; y: number; z: number; sourceTimestamp: string }[];
+  }) => void;
   nativeError: (payload: PolarNativeErrorPayload) => void;
 };
 

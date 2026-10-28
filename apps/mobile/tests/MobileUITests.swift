@@ -15,7 +15,7 @@ final class MobileUITests: XCTestCase {
     for _ in 0..<8 { if demo.isHittable { break }; app.swipeUp() }
     XCTAssertTrue(demo.isHittable)
     demo.tap()
-    let pending = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "120 samples · 1 pending batches")).firstMatch
+    let pending = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "4770 samples · 1 pending batches")).firstMatch
     XCTAssertTrue(pending.waitForExistence(timeout: 15))
     // Relaunch verifies SQLite persistence independently of React memory.
     app.terminate()
@@ -25,7 +25,7 @@ final class MobileUITests: XCTestCase {
     for _ in 0..<8 { if sync.isHittable { break }; app.swipeUp() }
     XCTAssertTrue(sync.isHittable)
     sync.tap()
-    let acknowledged = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "120 samples · Synced to server")).firstMatch
+    let acknowledged = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "4770 samples · Synced to server")).firstMatch
     XCTAssertTrue(acknowledged.waitForExistence(timeout: 30))
     let attachment = XCTAttachment(screenshot: app.screenshot())
     attachment.name = "apexVIP synthetic native sync"

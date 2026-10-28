@@ -24,7 +24,11 @@ final class PolarBridgeManager: NSObject, PolarBleApiObserver, PolarBleApiPowerS
     ]
   )
 
-  private static let iso8601Formatter = ISO8601DateFormatter()
+  private static let iso8601Formatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+  }()
 
   var eventHandler: EventHandler?
 
@@ -176,7 +180,6 @@ final class PolarBridgeManager: NSObject, PolarBleApiObserver, PolarBleApiPowerS
           self?.ecgStreamDisposable?.dispose()
           self?.ecgStreamDisposable = nil
           self?.ecgStreamEnabled = false
-          self?.state = .error
           self?.emitNativeError(code: "ERR_POLAR_ECG_STREAM", message: error.localizedDescription)
         },
         onCompleted: { [weak self] in
@@ -225,7 +228,6 @@ final class PolarBridgeManager: NSObject, PolarBleApiObserver, PolarBleApiPowerS
           self?.accelerometerStreamDisposable?.dispose()
           self?.accelerometerStreamDisposable = nil
           self?.accelerometerStreamEnabled = false
-          self?.state = .error
           self?.emitNativeError(code: "ERR_POLAR_ACCEL_STREAM", message: error.localizedDescription)
         },
         onCompleted: { [weak self] in
@@ -251,6 +253,8 @@ final class PolarBridgeManager: NSObject, PolarBleApiObserver, PolarBleApiPowerS
     ]
 
     if let currentDevice {
+      payload["hrReady"] = api.isFeatureReady(currentDevice.deviceId, feature: .feature_hr)
+      payload["streamingReady"] = api.isFeatureReady(currentDevice.deviceId, feature: .feature_polar_online_streaming)
       payload["id"] = currentDevice.deviceId
       payload["name"] = currentDevice.name
     }
@@ -316,7 +320,7 @@ final class PolarBridgeManager: NSObject, PolarBleApiObserver, PolarBleApiPowerS
   }
 
   func bleSdkFeatureReady(_ identifier: String, feature: PolarBleSdkFeature) {
-    if currentDevice?.deviceId == identifier, state != .connected {
+    if currentDevice?.deviceId == identifier {
       state = .connected
       emitConnectionState()
     }
@@ -426,37 +430,18 @@ final class PolarBridgeManager: NSObject, PolarBleApiObserver, PolarBleApiPowerS
       return
     }
 
-    for sample in data {
-      eventHandler?(
-        "ecgSampleReceived",
-        [
-          "timestamp": Self.iso8601Formatter.string(from: Date()),
-          "microVolts": Int(sample.voltage),
-          "deviceId": deviceId,
-          "sourceTimestamp": String(sample.timeStamp),
-        ]
-      )
-    }
+    eventHandler?("ecgBatchReceived", [
+      "receivedAt": Date().timeIntervalSince1970 * 1000,
+      "samples": data.map { ["microVolts": Int($0.voltage), "sourceTimestamp": String($0.timeStamp)] as [String: Any] },
+    ])
   }
 
   private func handleAccelerometerData(_ data: PolarAccData, deviceId: String) {
-    guard accelerometerStreamEnabled else {
-      return
-    }
-
-    for sample in data {
-      eventHandler?(
-        "polarAccelerometerSampleReceived",
-        [
-          "timestamp": Self.iso8601Formatter.string(from: Date()),
-          "x": Int(sample.x),
-          "y": Int(sample.y),
-          "z": Int(sample.z),
-          "deviceId": deviceId,
-          "sourceTimestamp": String(sample.timeStamp),
-        ]
-      )
-    }
+    guard accelerometerStreamEnabled else { return }
+    eventHandler?("accelerometerBatchReceived", [
+      "receivedAt": Date().timeIntervalSince1970 * 1000,
+      "samples": data.map { ["x": Int($0.x), "y": Int($0.y), "z": Int($0.z), "sourceTimestamp": String($0.timeStamp)] as [String: Any] },
+    ])
   }
 
   private func devicePayload(from device: PolarDeviceInfo) -> [String: Any] {
