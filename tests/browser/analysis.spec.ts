@@ -6,19 +6,25 @@ test("Session-first analysis, signals, comparison, interval, exports and saved v
   request,
 }) => {
   test.setTimeout(120000);
-  await page.goto("/");
+  await page.goto("/advanced");
   await page.getByRole("button", { name: "Open demo workspace" }).click();
   await expect(
     page.getByRole("heading", { name: "Your overview" }),
   ).toBeVisible();
   await expect(page.locator(".overview-summary")).toContainText("72");
   await expect(page.locator(".recent-session-button")).toHaveCount(4);
-  await page.screenshot({ path: "docs/dashboard-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: test.info().outputPath("dashboard-desktop.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: /P-014 Intervals · morning/ }).click();
   await expect(page.locator(".chart")).toHaveCount(1);
   await expect(page.locator(".legend")).toContainText("Heart rate");
   await expect(page.locator(".legend")).toContainText("bpm");
-  await page.screenshot({ path: "docs/analysis-default.png", fullPage: true });
+  await page.screenshot({
+    path: test.info().outputPath("analysis-default.png"),
+    fullPage: true,
+  });
   await expect(page.getByTestId("data-gap").first()).toBeVisible();
   await expect(
     page.getByRole("dialog", { name: "Customize chart" }),
@@ -97,7 +103,10 @@ test("Session-first analysis, signals, comparison, interval, exports and saved v
     .click();
   expect((await jsonDownload).suggestedFilename()).toMatch(/\.json$/);
   await page.locator(".view-menu summary").click();
-  await page.screenshot({ path: "docs/analysis-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: test.info().outputPath("analysis-desktop.png"),
+    fullPage: true,
+  });
   await page
     .getByRole("button", { name: "Session details", exact: true })
     .first()
@@ -145,7 +154,7 @@ test("Session-first analysis, signals, comparison, interval, exports and saved v
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0);
   await page.screenshot({
-    path: "docs/analysis-mobile-web.png",
+    path: test.info().outputPath("analysis-mobile-web.png"),
     fullPage: true,
   });
   expect(
@@ -155,7 +164,7 @@ test("Session-first analysis, signals, comparison, interval, exports and saved v
   ).toBeTruthy();
   await page.getByRole("button", { name: "Overview", exact: true }).click();
   await page.screenshot({
-    path: "docs/dashboard-mobile-web.png",
+    path: test.info().outputPath("dashboard-mobile-web.png"),
     fullPage: true,
   });
   // Keyboard-only opening from the overview.
@@ -169,7 +178,7 @@ test("Filters, four-session comparison, advanced controls and immutable question
   request,
 }) => {
   test.setTimeout(90000);
-  await page.goto("/");
+  await page.goto("/advanced");
   await page.getByRole("button", { name: "Open demo workspace" }).click();
   await page.getByRole("button", { name: /^Sessions/ }).click();
   await page

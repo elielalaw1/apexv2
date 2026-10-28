@@ -1,4 +1,4 @@
-import Dashboard from "@/components/Dashboard";
+import SessionWorkspace from "@/components/SessionWorkspace";
 export default function Page() {
-  return <Dashboard />;
+  return <SessionWorkspace />;
 }

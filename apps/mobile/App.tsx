@@ -89,7 +89,9 @@ export default function App() {
   } | null>(null);
   const [preview, setPreview] = useState(previewRef.current);
   const [account, setAccount] = useState<Account | null>(null),
-    [server, setServer] = useState("http://127.0.0.1:3003"),
+    [server, setServer] = useState(
+      process.env.EXPO_PUBLIC_APEX_SERVER_URL ?? "http://127.0.0.1:3003",
+    ),
     [email, setEmail] = useState("demo@apexvip.local"),
     [password, setPassword] = useState("apex-demo-2026"),
     [participant, setParticipant] = useState("P-001"),
@@ -186,18 +188,41 @@ export default function App() {
   }, []);
   async function login() {
     await act(async () => {
-      if (!/^https?:\/\//.test(server))
-        throw Error("Enter an HTTP or HTTPS server address");
+      const address = server.trim().replace(/\/+$/, "");
+      let parsed: URL;
+      try {
+        parsed = new URL(address);
+      } catch {
+        throw Error(
+          "Enter your APEX server address, for example http://192.168.1.100:3003",
+        );
+      }
+      if (
+        !["http:", "https:"].includes(parsed.protocol) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.search ||
+        parsed.hash ||
+        parsed.pathname !== "/"
+      )
+        throw Error(
+          "Enter only the HTTP or HTTPS server address, without a page path or login details.",
+        );
       const r = await request<{ token: string; user: { workspace: string } }>(
-        server,
+        address,
         "auth/login",
         { email, password },
       );
-      const a = { token: r.token, workspace: r.user.workspace, server };
+      const a = {
+        token: r.token,
+        workspace: r.user.workspace,
+        server: address,
+      };
       await SecureStore.setItemAsync("apex-account", JSON.stringify(a));
       setAccount(a);
+      setServer(address);
       await refresh(a);
-      const resp = await fetch(`${server}/api/templates`, {
+      const resp = await fetch(`${address}/api/templates`, {
         headers: { Authorization: `Bearer ${a.token}` },
       });
       if (resp.ok) {

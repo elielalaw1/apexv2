@@ -21,6 +21,16 @@ export async function request<T>(
     const data = await r.json();
     if (!r.ok) throw Error(`${r.status}: ${data.error ?? "Upload failed"}`);
     return data;
+  } catch (e) {
+    if (controller.signal.aborted)
+      throw Error(
+        "The APEX server did not respond. Check the server address and your network connection.",
+      );
+    if (e instanceof TypeError)
+      throw Error(
+        "Could not reach APEX. Check the server address. For a local server, use the Mac’s Wi-Fi address, connect both devices to the same network, and allow Local Network access for the app.",
+      );
+    throw e;
   } finally {
     clearTimeout(timer);
   }

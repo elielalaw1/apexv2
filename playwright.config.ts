@@ -15,7 +15,10 @@ export default defineConfig({
     command: `next ${process.env.APEX_E2E_PRODUCTION === "1" ? "start" : "dev"} --hostname 127.0.0.1 --port ${port}`,
     url: baseURL,
     reuseExistingServer: false,
-    env: { APEX_DB_PATH: "data/browser-test.sqlite" },
+    env: {
+      APEX_DB_PATH: "data/browser-test.sqlite",
+      APEX_E2E_ISOLATED: process.env.APEX_E2E_PRODUCTION === "1" ? "0" : "1",
+    },
     timeout: 120000,
   },
   reporter: "list",

@@ -43,6 +43,7 @@ export default function Chart({
   selection,
   onSelect,
   dragMode,
+  compact = false,
 }: {
   panel: Panel;
   sessions: Session[];
@@ -54,6 +55,7 @@ export default function Chart({
   selection: Range | null;
   onSelect: (r: Range | null) => void;
   dragMode: "select" | "zoom" | "pan";
+  compact?: boolean;
 }) {
   const [result, setResult] = useState<{ signature: string; series: Series[] }>(
       { signature: "", series: [] },
@@ -67,6 +69,7 @@ export default function Chart({
   }>({ key: "", series: [] });
   const [statsError, setStatsError] = useState("");
   const start = useRef<number | null>(null);
+  const [dragPreview, setDragPreview] = useState<Range | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [chartWidth, setChartWidth] = useState(900);
   useEffect(() => {
@@ -266,7 +269,8 @@ export default function Chart({
                 borderBottom: `2px ${i >= panel.signalKinds.length ? "dashed" : "solid"} ${color(i)}`,
               }}
             />
-            {sessionLabel(s.sessionId)} · {signals[s.signal].name}{" "}
+            {!compact && `${sessionLabel(s.sessionId)} · `}
+            {signals[s.signal].name}{" "}
             <b>
               {panel.axis === "normalized"
                 ? "z (normalized)"
@@ -292,14 +296,24 @@ export default function Chart({
       ) : (
         <svg
           ref={svgRef}
-          className="chart"
+          className={`chart${compact ? " compact-chart" : ""}`}
           role="group"
-          aria-label={`${panel.title}. Drag to select an interval, plus and minus to zoom, arrow keys to pan.`}
+          aria-label={`${panel.title}. Drag to ${dragMode === "zoom" ? "zoom in" : dragMode === "pan" ? "pan" : "select an interval"}. Plus and minus zoom, arrow keys move the cursor, Shift and arrow keys pan.`}
           tabIndex={0}
           viewBox={`0 0 ${width} ${h + top + bottom}`}
-          onPointerMove={(e) => onCursor(pointer(e))}
+          onPointerMove={(e) => {
+            const t = pointer(e);
+            onCursor(t);
+            if (compact && start.current !== null)
+              setDragPreview([
+                Math.min(start.current, t),
+                Math.max(start.current, t),
+              ]);
+          }}
           onPointerDown={(e) => {
             start.current = pointer(e);
+            if (compact) onCursor(start.current);
+            if (compact) setDragPreview([start.current, start.current]);
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
           onPointerUp={(e) => {
@@ -321,9 +335,11 @@ export default function Chart({
               }
             }
             start.current = null;
+            setDragPreview(null);
           }}
           onPointerCancel={() => {
             start.current = null;
+            setDragPreview(null);
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -436,6 +452,18 @@ export default function Chart({
             </text>
           ))}
           <g clipPath={`url(#clip-${panel.id})`}>
+            {dragPreview && (
+              <rect
+                data-testid="zoom-preview"
+                x={x(dragPreview[0])}
+                y={top}
+                width={Math.max(0, x(dragPreview[1]) - x(dragPreview[0]))}
+                height={h}
+                fill="#326c84"
+                opacity=".15"
+                pointerEvents="none"
+              />
+            )}
             {selection && (
               <rect
                 data-testid="selected-interval"
@@ -580,7 +608,10 @@ export default function Chart({
         </div>
       )}
       {cursor !== null && (
-        <div className="cursor-values" aria-live="polite">
+        <div
+          className={`cursor-values${compact ? " compact-readout" : ""}`}
+          aria-live={compact ? "off" : "polite"}
+        >
           <span>{timeLabel(cursor, layout.alignment === "absolute")}</span>
           {series.map((s, i) => {
             const t =
@@ -608,15 +639,27 @@ export default function Chart({
                 key={`${s.sessionId}-${s.signal}`}
                 style={{ color: color(i) }}
               >
-                {picked.find((p) => p.id === s.sessionId)?.participantLabel} ·{" "}
-                {displayText(
-                  picked.find((p) => p.id === s.sessionId)?.title ?? "",
-                )}{" "}
-                · {signals[s.signal].name}: {value}
+                {!compact && (
+                  <>
+                    {picked.find((p) => p.id === s.sessionId)?.participantLabel}{" "}
+                    ·{" "}
+                    {displayText(
+                      picked.find((p) => p.id === s.sessionId)?.title ?? "",
+                    )}{" "}
+                    ·{" "}
+                  </>
+                )}
+                {signals[s.signal].name}: {value}
               </span>
             );
           })}
           <small>Nearest displayed sample</small>
+        </div>
+      )}
+      {compact && cursor === null && (
+        <div className="cursor-values compact-readout">
+          <span>Hover or tap to inspect a value.</span>
+          <small>Drag horizontally to zoom.</small>
         </div>
       )}
       {selection && (

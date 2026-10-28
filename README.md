@@ -1,5 +1,7 @@
 # apexVIP
 
+[Installation, telefonprov och leverans](docs/SHIP.md) · [Installera på iPhone](docs/IPHONE_SETUP.md)
+
 En ny, separat APEX-kodbas för mätning och analys. Webbens första sammanhängande milstolpe är byggd med ett riktigt API och lokal SQLite. Expo-appen har en HR/RR-kedja, beständig utkorg och återanvänder den tidigare Polar-bryggan.
 
 ## Starta webben
@@ -22,7 +24,27 @@ export PATH="/opt/homebrew/bin:$PATH"
 
 Demodata lagras genom samma validerade ingest-kedja som mobilmätningar. Databas: `data/apexvip.sqlite`. Originalrepos och tidigare databas berörs inte.
 
-## Webbflöden
+## Enklare webbflöde — 18 oktober 2026
+
+Startsidan öppnar direkt på **Sessions**. Sök eller filtrera på deltagare, öppna ett pass och växla mellan inspelade signaler. Passet visar ett fast diagram med sessionsmedel och toppvärde, självskattningar, händelser samt rådataexport till CSV. Välj **Zoom in** eller dra över diagrammet för att zooma och välj **Full session** för att återställa. Hela sessionsraden öppnar passet. Sökning och deltagarfilter kan återställas direkt; bakåt återför fokus till det öppnade passet. Smala vyer behåller datum och demo-markering. Signalbeskrivningar, en fast värdeavläsning och synlig zoommarkering hjälper läsningen av diagrammet. Sessionens adress kan bokmärkas; bakåt och omladdning fungerar.
+
+Ingen sidomeny, panelbyggare, jämförelse eller formuläradministration ingår i standardflödet. Den tidigare analysytan finns kvar separat på `/advanced` för befintliga sparade vyer och fortsatt utveckling. Mobilinsamling, API och databas behåller sina kontrakt.
+
+Originalreferens: de lokala kopiorna av [apex-web](https://github.com/elielalaw1/apex-web) och [apex-mobile](https://github.com/elielalaw1/apex-mobile), tillsammans med skärmbilderna från examensarbetet. Grundflödet är sessionslista → inspelning → signaler och självskattningar.
+
+Skärmbilder: [sessionslista](docs/simple-sessions-desktop.png), [passvy](docs/simple-review-desktop.png), [smal sessionslista](docs/simple-sessions-mobile.png) och [smal passvy](docs/simple-review-mobile.png).
+
+## Guidning och valfri anpassning
+
+**Quick tour** ger en frivillig, animerad genomgång av sessionslistan och passvyn. Den pekar ut verkliga kontroller, kan hoppas över och öppnas igen. En kort introduktionsruta visas tills den stängts per arbetsyta/webbläsare. Guiden hanterar tangentbordsfokus och `prefers-reduced-motion`.
+
+I ett pass öppnar **Customize** en redigeringsvy. Välj inspelade signaler, självskattningar och tidslinje; flytta kort med handtaget eller pilknapparna. Släpp en signalgraf i en annan grafs markerade mittzon för att kombinera dem. Släpp på kortets övriga yta för att flytta. **Combine with…** är ett alternativ utan drag. Högst två signaler ingår i en gemensam graf; olika enheter får varsin märkt axel. **Separate graphs** delar upp dem igen. Alla grafer delar tid, zoom och markör.
+
+**Save layout** sparar lokalt per arbetsyta och pass i den aktuella webbläsaren. **Cancel** återställer den tidigare vyn; **Restore default** tar tillbaka den enkla standardvyn. Inställningen synkas ännu inte mellan datorer. Saknade signaler och ogiltiga äldre inställningar faller tillbaka till standardvyn. Själva mätdata ändras inte.
+
+[Guidning](docs/dashboard-tour.png) · [Anpassad vy](docs/customized-dashboard.png) · [Smal anpassad vy](docs/customized-dashboard-mobile.png).
+
+## Tidigare analysyta (`/advanced`)
 
 - Gränssnittet är på engelska. Starta i **Overview** och klicka på en sessionsrad för att öppna analysen.
 - Deltagare, filtrerade sessioner och sessionsdetaljer med metadata/datakvalitet.
@@ -38,6 +60,8 @@ Demodata lagras genom samma validerade ingest-kedja som mobilmätningar. Databas
 Diagrammets tangentbord: `+` / `−` zoomar, piltangenter flyttar markören, `Shift` + piltangent panorerar, `Enter` markerar 30 sekunder runt markören och `Escape` tar bort markeringen. **Drag to** väljer separat mellan markering, zoom och panorering. Intervallstatistik visas endast efter markering. Händelser kan öppnas med klick eller tangentbord. Diagrammen interpolerar inte över luckor eller otillräcklig mätkvalitet.
 
 ## Mobil
+
+[Steg för fysisk iPhone och Polar H10](docs/IPHONE_SETUP.md). Starta webben med `npm run dev:lan` när telefonen ska ansluta över samma Wi-Fi. Valfri standardadress för appen kan anges i `apps/mobile/.env.local` med `EXPO_PUBLIC_APEX_SERVER_URL`; se `apps/mobile/.env.example`.
 
 ```sh
 cd apps/mobile
@@ -70,7 +94,7 @@ För webbläsartest mot ett redan byggt produktionsbygge: `APEX_E2E_PRODUCTION=1
 
 [Status](docs/STATUS.md) redovisar resultaten och kvarstående arbete. [Mobiltest](docs/MOBILE_VERIFICATION.md) beskriver native testkörning. Skärmbilder finns i `docs/analysis-desktop.png`, `docs/analysis-mobile-web.png` och `docs/mobile-ios-simulator.png`.
 
-Repot finns lokalt på grenen `main`; det har inte publicerats på GitHub.
+Repot finns på grenen `main` och publiceras privat som [elielalaw1/apexv2](https://github.com/elielalaw1/apexv2). Den lokala mappen och appnamnet är fortsatt `apexVIP`.
 
 ## Dokumentation och driftgräns
 
