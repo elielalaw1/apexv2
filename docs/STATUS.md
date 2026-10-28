@@ -1,5 +1,11 @@
 # Leveransförberedelse — 28 oktober 2026
 
+## Uppdatering: fysisk installation genomförd
+
+Efter användarens uttryckliga godkännande användes LikeLab-teamet för lokal utvecklingssignering. Ett Release-bygge inklusive Polar-bryggan passerade med Xcode. `devicectl` bekräftade installation av `se.apex.vip` på den fysiska iPhone 17 och lyckad start av appen. JavaScript är inbäddat; Metro behövs inte. Serveradress för detta lokala test är Macens LAN-adress, via ignorerad lokal miljökonfiguration. Inga signeringsuppgifter eller profiler har lagts i Git.
+
+Den första GitHub Actions-körningen är också godkänd: webbtypkontroll, 10 tester, produktionsbygge, 7 webbläsartester, mobiltypkontroll och iOS-export. Installation och processstart bevisar ännu inte inloggning, synk eller fysisk H10-insamling; dessa telefonprov återstår. Personal Team-felet nedan är historiken före bytet av signeringsteam.
+
 Privat GitHub-repo: `elielalaw1/apexv2`. Installations- och testinstruktioner finns i [SHIP.md](SHIP.md). GitHub Actions har lagts till för webbtypkontroll, tester, produktionsbygge, Playwright, mobiltypkontroll och iOS-export. CI-resultat kontrolleras separat efter push.
 
 Lokalt verifierat idag: webbtypkontroll, 10 enhets-/integritetstester, produktionsbygge och 7 Playwright-tester mot produktionsbygget är godkända. Mobilens typkontroll och iOS/Hermes-export är godkända. Webbservern svarade över Macens LAN-adress.
