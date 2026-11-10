@@ -32,8 +32,12 @@ export function summarize(points: Sample[]) {
     mean: good.length
       ? good.reduce((s, p) => s + p.value, 0) / good.length
       : null,
-    min: good.length ? Math.min(...good.map((p) => p.value)) : null,
-    max: good.length ? Math.max(...good.map((p) => p.value)) : null,
+    min: good.length
+      ? good.reduce((v, p) => Math.min(v, p.value), Infinity)
+      : null,
+    max: good.length
+      ? good.reduce((v, p) => Math.max(v, p.value), -Infinity)
+      : null,
   };
 }
 // Explicit, versioned HRV method. No stress labels; suspect points split valid runs.

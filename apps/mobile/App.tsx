@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   AppState,
   PermissionsAndroid,
   Platform,
@@ -12,32 +11,16 @@ import {
   Text,
   TextInput,
   View,
+  Switch,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
-import { randomUUID } from "expo-crypto";
+import { digestStringAsync, CryptoDigestAlgorithm } from "expo-crypto";
 import Polar, { PolarConnectionStatePayload } from "./modules/apex-polar";
-import {
-  Session,
-  Template,
-  defaultTemplate,
-  signals,
-  SignalKind,
-} from "../../src/core/contract";
-import { displayText } from "../../src/core/presentation";
-import { start, event, finish, snapshot } from "./src/collector";
-import {
-  counts,
-  localSessions,
-  recover,
-  saveSession,
-  seal,
-  SampleWriter,
-  saveLocalTemplate,
-  localTemplates,
-} from "./src/storage";
-import { fullSignalFixture } from "../../src/core/polarFixture";
+import { Session, defaultTemplate } from "../../src/core/contract";
+import { start, finish, snapshot, event } from "./src/collector";
+import { counts, localSessions, recover } from "./src/storage";
 import LiveSignals from "./src/LiveSignals";
 import {
   observePolar,
@@ -45,7 +28,15 @@ import {
   startPreview,
   stopStreams,
 } from "./src/livePolar";
-import { request, synchronize } from "./src/sync";
+import { synchronize } from "./src/sync";
+const mvpTemplate = {
+  ...defaultTemplate,
+  id: "mvp-recording",
+  version: 1,
+  title: "H10 recording",
+  questions: [],
+  eventLabels: [],
+};
 type Account = { token: string; workspace: string; server: string };
 function Button({
   title,
@@ -76,26 +67,26 @@ function Button({
     </Pressable>
   );
 }
-function validateAnswers(
-  template: Template,
-  phase: "pre" | "post",
-  answers: Record<string, string>,
-) {
-  const out: Record<string, number> = {};
-  for (const q of template.questions.filter((q) => q.phase === phase)) {
-    const value = Number(answers[q.id]);
-    if (
-      !answers[q.id]?.trim() ||
-      !Number.isFinite(value) ||
-      value < q.min ||
-      value > q.max
-    )
-      throw Error(`${displayText(q.label)}: enter ${q.min}–${q.max}`);
-    out[q.id] = value;
-  }
-  return out;
-}
 export default function App() {
+  const defaultServer =
+    process.env.EXPO_PUBLIC_APEX_SERVER_URL ?? "http://127.0.0.1:3003";
+  const [server, setServer] = useState(defaultServer);
+  const [account, setAccount] = useState<Account>({
+    token: "",
+    workspace: "demo-lab",
+    server: defaultServer,
+  });
+  const [phoneSensors, setPhoneSensors] = useState(true);
+  const [maxHeartRate, setMaxHeartRate] = useState("");
+  const [name, setName] = useState("");
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [settings, setSettings] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [connection, setConnection] =
+    useState<PolarConnectionStatePayload | null>(null);
+  const [current, setCurrent] = useState(snapshot());
+  const [live, setLive] = useState(liveSnapshot());
   const previewRef = useRef<{
     bpm: number;
     contactDetected: boolean;
@@ -103,37 +94,16 @@ export default function App() {
     rrAvailable: boolean;
   } | null>(null);
   const [preview, setPreview] = useState(previewRef.current);
-  const [live, setLive] = useState(liveSnapshot());
-  const [account, setAccount] = useState<Account | null>(null),
-    [server, setServer] = useState(
-      process.env.EXPO_PUBLIC_APEX_SERVER_URL ?? "http://127.0.0.1:3003",
-    ),
-    [email, setEmail] = useState("demo@apexvip.local"),
-    [password, setPassword] = useState("apex-demo-2026"),
-    [participant, setParticipant] = useState("P-001"),
-    [answers, setAnswers] = useState<Record<string, string>>({
-      readiness: "7",
-      rpe: "6",
-    }),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState(""),
-    [connection, setConnection] = useState<PolarConnectionStatePayload | null>(
-      null,
-    ),
-    [current, setCurrent] = useState(snapshot()),
-    [rows, setRows] = useState<
-      {
-        session: Session;
-        sealed: number;
-        samples: number;
-        pending: number;
-        signals: { signal: string; count: number }[];
-      }[]
-    >([]),
-    [templates, setTemplates] = useState<Template[]>([defaultTemplate]),
-    [template, setTemplate] = useState(defaultTemplate);
+  const [rows, setRows] = useState<
+    {
+      session: Session;
+      sealed: number;
+      samples: number;
+      pending: number;
+      signals: { signal: string; count: number }[];
+    }[]
+  >([]);
   async function refresh(a = account) {
-    if (!a) return;
     const locals = await localSessions(a.workspace);
     setRows(
       await Promise.all(
@@ -147,6 +117,7 @@ export default function App() {
   }
   async function act(fn: () => Promise<void>) {
     setBusy(true);
+    setMessage("");
     try {
       await fn();
     } catch (e) {
@@ -156,21 +127,15 @@ export default function App() {
     }
   }
   useEffect(() => {
-    void SecureStore.getItemAsync("apex-account")
-      .then(async (data) => {
-        if (data) {
-          const a = JSON.parse(data);
-          setAccount(a);
-          setServer(a.server);
-          await refresh(a);
-          const cached = await localTemplates(a.workspace);
-          if (cached.length) {
-            setTemplates(cached);
-            setTemplate(cached[0]);
-          }
+    void SecureStore.getItemAsync("apex-mvp-server")
+      .then((address) => {
+        if (address) {
+          setServer(address);
+          setAccount({ token: "", workspace: "demo-lab", server: address });
         }
       })
       .catch((e) => setMessage(e.message));
+    void refresh().catch((e) => setMessage(e.message));
     const stopObserving = observePolar();
     const subs = Polar
       ? [
@@ -213,59 +178,6 @@ export default function App() {
       app.remove();
     };
   }, []);
-  async function login() {
-    await act(async () => {
-      const address = server.trim().replace(/\/+$/, "");
-      let parsed: URL;
-      try {
-        parsed = new URL(address);
-      } catch {
-        throw Error(
-          "Enter your APEX server address, for example http://192.168.1.100:3003",
-        );
-      }
-      if (
-        !["http:", "https:"].includes(parsed.protocol) ||
-        parsed.username ||
-        parsed.password ||
-        parsed.search ||
-        parsed.hash ||
-        parsed.pathname !== "/"
-      )
-        throw Error(
-          "Enter only the HTTP or HTTPS server address, without a page path or login details.",
-        );
-      const r = await request<{ token: string; user: { workspace: string } }>(
-        address,
-        "auth/login",
-        { email, password },
-      );
-      const a = {
-        token: r.token,
-        workspace: r.user.workspace,
-        server: address,
-      };
-      await SecureStore.setItemAsync("apex-account", JSON.stringify(a));
-      setAccount(a);
-      setServer(address);
-      await refresh(a);
-      const resp = await fetch(`${address}/api/templates`, {
-        headers: { Authorization: `Bearer ${a.token}` },
-      });
-      if (resp.ok) {
-        const t: Template[] = await resp.json();
-        if (t.length) {
-          for (const definition of t)
-            await saveLocalTemplate(a.workspace, definition);
-          setTemplates(t);
-          setTemplate(t[0]);
-        }
-      }
-      setMessage(
-        "Signed in. Batches are marked synced only after server acknowledgment.",
-      );
-    });
-  }
   async function scan() {
     await act(async () => {
       if (!Polar)
@@ -285,41 +197,35 @@ export default function App() {
       setConnection(await Polar.getConnectionState());
     });
   }
-  async function demo() {
-    if (!account) return;
-    await act(async () => {
-      const now = Date.now(),
-        s: Session = {
-          id: randomUUID(),
-          participantId: participant,
-          participantLabel: participant,
-          title: "Synthetic full-signal mobile session",
-          typeId: template.id,
-          typeVersion: template.version,
-          startedAt: now,
-          durationMs: 60000,
-          demo: true,
-          source: "mobile-synthetic-v2",
-          timePolicy: "receipt-relative-v1",
-          state: "ended",
-          events: [
-            { id: randomUUID(), t: 15000, type: "event", label: "Arbete" },
-          ],
-        };
-      await saveLocalTemplate(account.workspace, template);
-      await saveSession(s, account.workspace);
-      const writer = new SampleWriter(s.id);
-      for (const sample of fullSignalFixture(now)) {
-        writer.append(sample);
-        if (writer.buffered >= 500) await writer.flush();
-      }
-      await writer.close();
-      await seal(s, account.workspace);
-      await refresh();
-      setMessage(
-        "Synthetic recording saved. Tap Sync pending batches to upload it.",
-      );
-    });
+
+  function address() {
+    const value = server.trim().replace(/\/+$/, "");
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw Error("Enter the Mac’s server address in Server settings.");
+    }
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/"
+    )
+      throw Error("Enter an HTTP or HTTPS server address without a page path.");
+    return value;
+  }
+  async function send() {
+    const target = address();
+    await SecureStore.setItemAsync("apex-mvp-server", target);
+    setAccount((a) => ({ ...a, server: target }));
+    await synchronize(target, "", account.workspace, (n) =>
+      setMessage(`Sending… ${n} batches received`),
+    );
+    await refresh();
+    setMessage("Sent. Open the web dashboard to view your session.");
   }
   return (
     <SafeAreaProvider>
@@ -330,445 +236,328 @@ export default function App() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.logo}>
-              apex<Text style={styles.vip}> VIP</Text>
-            </Text>
-            <Text style={styles.tag}>RECORDING</Text>
+            <Text style={styles.logo}>apex</Text>
+            <Text style={styles.tag}>POLAR H10</Text>
           </View>
-          <Text style={styles.eyebrow}>RECORDING / POLAR H10</Text>
-          <Text style={styles.title}>
-            {current.session ? "Recording in progress" : "Ready to record."}
-          </Text>
-          <Text style={styles.subtitle}>
-            Heart rate, RR, ECG and H10 movement. Saved locally, then synced to
-            your workspace.
-          </Text>
-          {message !== "" && (
-            <View accessibilityRole="alert" style={styles.notice}>
-              <Text style={styles.noticeText}>{message}</Text>
-            </View>
-          )}
-          {!account ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Connect to workspace</Text>
-              <Text style={styles.label}>Server address</Text>
-              <TextInput
-                style={styles.input}
-                accessibilityLabel="Server address"
-                autoCapitalize="none"
-                value={server}
-                onChangeText={setServer}
-              />
-              <Text style={styles.hint}>
-                On iPhone, use your Mac’s LAN address or an HTTPS server. Use
-                127.0.0.1 in the iOS simulator.
+          {message ? (
+            <View style={styles.notice}>
+              <Text accessibilityLiveRegion="polite" style={styles.noticeText}>
+                {message}
               </Text>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                accessibilityLabel="Email"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                accessibilityLabel="Password"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
-              <Button
-                title="Sign in"
-                onPress={() => void login()}
-                disabled={busy}
-              />
             </View>
-          ) : (
+          ) : null}
+          {!current.session ? (
             <>
-              <View style={styles.project}>
-                <Text style={styles.label}>WORKSPACE</Text>
-                <Text style={styles.projectName}>{account.workspace}</Text>
-                <Text style={styles.hint}>Pseudonymous participants</Text>
-              </View>
-              {!current.session ? (
-                <>
-                  <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.step}>01</Text>
-                      <Text style={styles.sectionTitle}>
-                        Participant & session type
-                      </Text>
-                    </View>
-                    <Text style={styles.label}>Participant ID</Text>
-                    <TextInput
-                      style={styles.input}
-                      accessibilityLabel="Participant ID"
-                      value={participant}
-                      onChangeText={setParticipant}
-                      autoCapitalize="none"
-                    />
-                    <Text style={styles.hint}>
-                      Use a pseudonymous ID, such as P-014.
-                    </Text>
-                    <View style={styles.chips}>
-                      {templates.map((t) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={`${t.id}-${t.version}`}
-                          onPress={() => setTemplate(t)}
-                          style={[
-                            styles.chip,
-                            template.id === t.id &&
-                              template.version === t.version &&
-                              styles.chipSelected,
-                          ]}
-                        >
-                          <Text style={styles.chipText}>
-                            {displayText(t.title)} v{t.version}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.step}>02</Text>
-                      <Text style={styles.sectionTitle}>Polar H10</Text>
-                    </View>
-                    <Text style={styles.sensorStatus}>
-                      {connection?.isConnected
-                        ? "Connected · " + connection.name
-                        : connection?.connectionState === "scanning"
-                          ? "Searching for sensors…"
-                          : "No sensor connected"}
-                    </Text>
-                    <Text style={styles.hint}>
-                      Put on the strap and wet the electrodes. Sensor contact
-                      marks each sample as measured or uncertain.
-                    </Text>
-                    {connection?.isConnected && (
-                      <Text style={styles.hint}>
-                        {preview
-                          ? `${preview.bpm} bpm · RR ${preview.rrAvailable ? "available" : "missing"} · Contact ${!preview.contactSupported ? "unknown" : preview.contactDetected ? "good" : "uncertain"}`
-                          : "Waiting for the first HR packet to check contact…"}
-                      </Text>
-                    )}
-                    {connection?.isConnected && (
-                      <>
-                        <Text style={styles.hint}>
-                          {connection.streamingReady
-                            ? "H10 streaming services ready"
-                            : "Preparing H10 signal services…"}
-                        </Text>
-                        <LiveSignals data={live} recording={false} />
-                        <Button
-                          title="Restart signal preview"
-                          secondary
-                          disabled={busy}
-                          onPress={() =>
-                            void act(async () => {
-                              await stopStreams();
-                              await startPreview();
-                            })
-                          }
-                        />
-                      </>
-                    )}
-                    {connection?.discoveredDevices.map((d) => (
-                      <Button
-                        title={`Connect ${d.name} · ${d.id}`}
-                        key={d.id}
-                        secondary
-                        disabled={busy}
-                        onPress={() =>
-                          void act(async () => {
-                            await Polar?.stopScan();
-                            await Polar?.connectToDevice(d.id);
-                          })
-                        }
-                      />
-                    ))}
-                    <Button
-                      title="Find Polar H10"
-                      secondary
-                      disabled={busy}
-                      onPress={() => void scan()}
-                    />
-                  </View>
-                  <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.step}>03</Text>
-                      <Text style={styles.sectionTitle}>Before recording</Text>
-                    </View>
-                    {template.questions
-                      .filter((q) => q.phase === "pre")
-                      .map((q) => (
-                        <View key={q.id} style={{ gap: 8 }}>
-                          <Text style={styles.label}>
-                            {displayText(q.label)} · {q.min}–{q.max}
-                          </Text>
-                          <TextInput
-                            accessibilityLabel={displayText(q.label)}
-                            style={styles.input}
-                            keyboardType="numeric"
-                            value={answers[q.id] ?? ""}
-                            onChangeText={(value) =>
-                              setAnswers((prev) => ({ ...prev, [q.id]: value }))
-                            }
-                          />
-                        </View>
-                      ))}
-                    <Button
-                      title="Start recording"
-                      disabled={
-                        busy ||
-                        !connection?.isConnected ||
-                        !connection.hrReady ||
-                        !connection.streamingReady ||
-                        !!(
-                          preview?.contactSupported && !preview.contactDetected
-                        )
-                      }
-                      onPress={() =>
-                        void act(async () => {
-                          if (!/^[a-zA-Z0-9_.:-]{1,128}$/.test(participant))
-                            throw Error(
-                              "Participant ID: letters, numbers, hyphens or dots.",
-                            );
-                          await start(
-                            participant,
-                            account.workspace,
-                            validateAnswers(template, "pre", answers),
-                            template,
-                          );
-                          setCurrent(snapshot());
-                          setMessage("Samples are being saved locally.");
-                        })
-                      }
-                    />
-                  </View>
-                </>
-              ) : (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>
-                    {current.session.participantLabel} ·{" "}
-                    {displayText(template.title)}
-                  </Text>
-                  <Text style={styles.duration}>
-                    {Math.floor(
-                      (Date.now() - current.session.startedAt) / 60000,
-                    )}
-                    :
-                    {String(
-                      Math.floor(
-                        (Date.now() - current.session.startedAt) / 1000,
-                      ) % 60,
-                    ).padStart(2, "0")}
-                  </Text>
-                  <Text style={styles.sensorStatus}>
-                    {connection?.isConnected
-                      ? "H10 connected"
-                      : "Connection lost · recording is waiting"}
-                  </Text>
-                  {!connection?.isConnected && (
-                    <Button
-                      title="Reconnect H10"
-                      secondary
-                      disabled={busy}
-                      onPress={() =>
-                        void act(async () => {
-                          const id = current.session?.source.replace(
-                            "polar-h10:",
-                            "",
-                          );
-                          if (id) await Polar?.connectToDevice(id);
-                        })
-                      }
-                    />
-                  )}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>1. Connect your H10</Text>
+                <Text style={styles.sensorStatus}>
+                  {connection?.isConnected
+                    ? `Connected · ${connection.name}`
+                    : connection?.connectionState === "scanning"
+                      ? "Searching…"
+                      : "Put on your strap, then find your sensor."}
+                </Text>
+                {connection?.isConnected && (
                   <Text style={styles.hint}>
-                    {current.persisted} samples saved · {current.buffered}{" "}
-                    buffered · Contact {current.contact ? "good" : "uncertain"}
+                    {preview
+                      ? `${preview.bpm} bpm · Contact ${!preview.contactSupported ? "unknown" : preview.contactDetected ? "good" : "adjust strap"}`
+                      : "Waiting for sensor…"}
                   </Text>
-                  {current.error && (
-                    <Text style={styles.error}>{current.error}</Text>
-                  )}
-                  <LiveSignals data={live} recording />
-                  <View style={styles.chips}>
-                    {template.eventLabels.map((label) => (
-                      <Button
-                        title={displayText(label)}
-                        key={label}
-                        secondary
-                        disabled={busy}
-                        onPress={() =>
-                          void act(async () => {
-                            await event(label);
-                            setMessage(`Event: ${displayText(label)}`);
-                          })
-                        }
-                      />
-                    ))}
-                  </View>
-                  {template.questions
-                    .filter((q) => q.phase === "post")
-                    .map((q) => (
-                      <View key={q.id} style={{ gap: 8 }}>
-                        <Text style={styles.label}>
-                          {displayText(q.label)} · {q.min}–{q.max}
-                        </Text>
-                        <TextInput
-                          accessibilityLabel={displayText(q.label)}
-                          style={styles.input}
-                          keyboardType="numeric"
-                          value={answers[q.id] ?? ""}
-                          onChangeText={(value) =>
-                            setAnswers((prev) => ({ ...prev, [q.id]: value }))
-                          }
-                        />
-                      </View>
-                    ))}
+                )}
+                {connection?.discoveredDevices
+                  .filter(
+                    (d) => d.id !== connection.id || !connection.isConnected,
+                  )
+                  .map((d) => (
+                    <Button
+                      key={d.id}
+                      title={`Connect ${d.name} · ${d.id}`}
+                      secondary
+                      disabled={busy}
+                      onPress={() =>
+                        void act(async () => {
+                          await Polar?.stopScan();
+                          await Polar?.connectToDevice(d.id);
+                        })
+                      }
+                    />
+                  ))}
+                {!connection?.isConnected && (
                   <Button
-                    title="Finish and save recording"
+                    title="Find Polar H10"
+                    disabled={busy}
+                    onPress={() => void scan()}
+                  />
+                )}
+              </View>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>2. Name your recording</Text>
+                <Text style={styles.label}>Your name</Text>
+                <TextInput
+                  style={styles.input}
+                  accessibilityLabel="Your name"
+                  placeholder="Your name"
+                  value={name}
+                  onChangeText={setName}
+                  maxLength={100}
+                />
+                <Text style={styles.label}>Session</Text>
+                <TextInput
+                  style={styles.input}
+                  accessibilityLabel="Session name"
+                  placeholder="e.g. Wednesday training"
+                  value={sessionTitle}
+                  onChangeText={setSessionTitle}
+                  maxLength={160}
+                />
+                <Text style={styles.hint}>
+                  Use the same session name to group participants on the web.
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <Text style={styles.label}>Phone sensors</Text>
+                  <Switch
+                    accessibilityLabel="Phone sensors"
+                    value={phoneSensors}
+                    onValueChange={setPhoneSensors}
+                  />
+                </View>
+                <Text style={styles.hint}>
+                  Motion, rotation, steps, cadence, elevation and GPS. Keep your
+                  phone in a fixed position and the app open.
+                </Text>
+                <Text style={styles.label}>Maximum heart rate (optional)</Text>
+                <TextInput
+                  accessibilityLabel="Maximum heart rate"
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  style={styles.input}
+                  value={maxHeartRate}
+                  onChangeText={setMaxHeartRate}
+                  placeholder="Your known max, e.g. 190"
+                />
+                <Text style={styles.hint}>
+                  Used for zones. Leave blank if unknown.
+                </Text>
+                <Button
+                  title="Start recording"
+                  disabled={
+                    busy ||
+                    !name.trim() ||
+                    !sessionTitle.trim() ||
+                    !connection?.isConnected ||
+                    !connection.hrReady ||
+                    !connection.streamingReady ||
+                    !!(preview?.contactSupported && !preview.contactDetected)
+                  }
+                  onPress={() =>
+                    void act(async () => {
+                      const max = maxHeartRate.trim()
+                        ? Number(maxHeartRate)
+                        : undefined;
+                      if (
+                        max !== undefined &&
+                        (!Number.isInteger(max) || max < 100 || max > 240)
+                      )
+                        throw Error(
+                          "Enter a maximum heart rate between 100 and 240, or leave it blank.",
+                        );
+                      await start(
+                        await digestStringAsync(
+                          CryptoDigestAlgorithm.SHA256,
+                          name.trim().normalize("NFKC").toLowerCase(),
+                        ),
+                        account.workspace,
+                        {},
+                        mvpTemplate,
+                        {
+                          name: name.trim(),
+                          title: sessionTitle.trim(),
+                          phoneSensors,
+                          maxHeartRate: max,
+                        },
+                      );
+                      setCurrent(snapshot());
+                    })
+                  }
+                />
+              </View>
+            </>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {current.session.participantLabel} · {current.session.title}
+              </Text>
+              <Text style={styles.duration}>
+                {Math.floor((Date.now() - current.session.startedAt) / 60000)}:
+                {String(
+                  Math.floor((Date.now() - current.session.startedAt) / 1000) %
+                    60,
+                ).padStart(2, "0")}
+              </Text>
+              <Text style={styles.sensorStatus}>
+                {connection?.isConnected
+                  ? "Recording · H10 connected"
+                  : "Connection lost · reconnect your strap"}
+              </Text>
+              {!connection?.isConnected && (
+                <Button
+                  title="Reconnect H10"
+                  secondary
+                  disabled={busy}
+                  onPress={() =>
+                    void act(async () => {
+                      const id = current.session?.source.replace(
+                        "polar-h10:",
+                        "",
+                      );
+                      if (id) await Polar?.connectToDevice(id);
+                    })
+                  }
+                />
+              )}
+              {current.error && (
+                <Text style={styles.error}>{current.error}</Text>
+              )}
+              <Text style={styles.hint}>{current.phoneStatus}</Text>
+              <View style={styles.chips}>
+                {["Work", "Rest"].map((label) => (
+                  <Button
+                    key={label}
+                    title={`Mark ${label}`}
+                    secondary
                     disabled={busy}
                     onPress={() =>
                       void act(async () => {
-                        await finish(
-                          validateAnswers(template, "post", answers),
-                        );
+                        await event(label);
                         setCurrent(snapshot());
-                        await refresh();
-                        setMessage(
-                          "Final buffer saved. The session is ready to sync.",
+                        setMessage(`${label} marked`);
+                      })
+                    }
+                  />
+                ))}
+              </View>
+              <LiveSignals data={live} recording />
+              <Button
+                title="Finish and send to web"
+                disabled={busy}
+                onPress={() =>
+                  void act(async () => {
+                    await finish({});
+                    setCurrent(snapshot());
+                    await refresh();
+                    try {
+                      await send();
+                    } catch (e) {
+                      throw Error(
+                        `Recording saved on this phone. ${e instanceof Error ? e.message : "Upload failed"} Use Send saved recordings to retry.`,
+                      );
+                    }
+                  })
+                }
+              />
+            </View>
+          )}
+          {!current.session && rows.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Saved recordings</Text>
+              {rows.map((r) => (
+                <View style={styles.localRow} key={r.session.id}>
+                  <Text style={styles.localTitle}>
+                    {r.session.title} · {r.session.participantLabel}
+                  </Text>
+                  <Text style={styles.hint}>
+                    {!r.sealed
+                      ? "Interrupted recording"
+                      : r.pending
+                        ? "Saved on phone · waiting to send"
+                        : "Sent to web"}
+                    {r.session.demo ? " · Synthetic demo" : ""}
+                  </Text>
+                  {!r.sealed && (
+                    <Button
+                      title="Recover recording"
+                      secondary
+                      disabled={busy}
+                      onPress={() =>
+                        void act(async () => {
+                          await recover(r.session.id, account.workspace);
+                          await refresh();
+                        })
+                      }
+                    />
+                  )}
+                  {!!r.sealed && !r.pending && (
+                    <Button
+                      title="Open dashboard"
+                      secondary
+                      onPress={() =>
+                        void act(async () => {
+                          await Linking.openURL(
+                            `${address()}/?session=${encodeURIComponent(r.session.id)}`,
+                          );
+                        })
+                      }
+                    />
+                  )}
+                </View>
+              ))}
+              <Button
+                title="Send saved recordings"
+                disabled={busy}
+                onPress={() => void act(send)}
+              />
+            </View>
+          )}
+          {!current.session && (
+            <>
+              <Button
+                title={settings ? "Close server settings" : "Server settings"}
+                secondary
+                onPress={() => setSettings(!settings)}
+              />
+              {settings && (
+                <View style={styles.section}>
+                  <Text style={styles.label}>Web server address</Text>
+                  <TextInput
+                    style={styles.input}
+                    accessibilityLabel="Web server address"
+                    value={server}
+                    onChangeText={setServer}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                  />
+                  <Text style={styles.hint}>
+                    Use your Mac’s Wi-Fi address, with :3003. Connect both
+                    devices to the same Wi-Fi.
+                  </Text>
+                  <Button
+                    title="Save server address"
+                    disabled={busy}
+                    onPress={() =>
+                      void act(async () => {
+                        const target = address();
+                        await SecureStore.setItemAsync(
+                          "apex-mvp-server",
+                          target,
                         );
+                        setAccount((a) => ({ ...a, server: target }));
+                        setSettings(false);
+                        setMessage("Server address saved.");
                       })
                     }
                   />
                 </View>
               )}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.step}>04</Text>
-                  <Text style={styles.sectionTitle}>Storage & sync</Text>
-                </View>
-                {rows.map((r) => (
-                  <View style={styles.localRow} key={r.session.id}>
-                    <Text style={styles.localTitle}>
-                      {r.session.participantLabel} ·{" "}
-                      {r.session.demo ? "DEMO" : "H10"}
-                    </Text>
-                    <Text style={styles.hint}>
-                      {r.samples} samples ·{" "}
-                      {!r.sealed
-                        ? "Interrupted / unfinished"
-                        : r.pending
-                          ? `${r.pending} pending batches`
-                          : "Synced to server"}
-                    </Text>
-                    <Text style={styles.hint}>
-                      {r.signals
-                        .map(
-                          (s) =>
-                            `${signals[s.signal as SignalKind]?.name ?? s.signal}: ${s.count}`,
-                        )
-                        .join(" · ")}
-                    </Text>
-                    {!!r.sealed && r.pending === 0 && (
-                      <Button
-                        title="View session on web"
-                        secondary
-                        disabled={busy}
-                        onPress={() =>
-                          void act(async () => {
-                            await Linking.openURL(
-                              `${account.server}/?session=${encodeURIComponent(r.session.id)}`,
-                            );
-                          })
-                        }
-                      />
-                    )}
-                    {!r.sealed && r.session.id !== current.session?.id && (
-                      <Button
-                        title="Recover interrupted session"
-                        secondary
-                        disabled={busy}
-                        onPress={() =>
-                          void act(async () => {
-                            await recover(r.session.id, account.workspace);
-                            await refresh();
-                            setMessage(
-                              "Saved samples recovered. The last unsaved buffer may be missing.",
-                            );
-                          })
-                        }
-                      />
-                    )}
-                  </View>
-                ))}
-                <Button
-                  title="Sync pending batches"
-                  disabled={busy || !!current.session}
-                  onPress={() =>
-                    void act(async () => {
-                      const n = await synchronize(
-                        account.server,
-                        account.token,
-                        account.workspace,
-                        (n) => setMessage(`${n} batches acknowledged…`),
-                      );
-                      await refresh();
-                      setMessage(
-                        `${n} batches acknowledged by the server. Raw data remains on this device.`,
-                      );
-                    })
-                  }
-                />
-                <Button
-                  title="Create synthetic test session"
-                  secondary
-                  disabled={busy || !!current.session}
-                  onPress={() => void demo()}
-                />
-                <Text style={styles.hint}>
-                  The test uses the same storage, outbox and API. It does not
-                  test sensor hardware.
-                </Text>
-              </View>
-              <Button
-                title="Sign out"
-                secondary
-                disabled={busy || !!current.session}
-                onPress={() =>
-                  void act(async () => {
-                    try {
-                      await request(
-                        account.server,
-                        "auth/logout",
-                        {},
-                        account.token,
-                      );
-                    } catch {
-                      setMessage(
-                        "Signed out locally. Could not revoke the server session without a connection.",
-                      );
-                    }
-                    await stopStreams();
-                    await SecureStore.deleteItemAsync("apex-account");
-                    setAccount(null);
-                    setRows([]);
-                  })
-                }
-              />
             </>
           )}
-          {busy && <ActivityIndicator color="#2b766b" style={{ margin: 12 }} />}
-          <Text style={styles.footer}>
-            apexVIP / Local recording · HR + RR + ECG + H10 XYZ{"\n"}Finish →
-            sync → open the session on web.
-          </Text>
+          {busy && <ActivityIndicator color="#2b766b" />}
         </ScrollView>
       </SafeAreaView>
     </SafeAreaProvider>

@@ -8,6 +8,21 @@ export const signalKinds = [
   "h10accy",
   "h10accz",
   "phoneacc",
+  "phoneaccx",
+  "phoneaccy",
+  "phoneaccz",
+  "phonegyrox",
+  "phonegyroy",
+  "phonegyroz",
+  "speed",
+  "pace",
+  "distance",
+  "cadence",
+  "steps",
+  "altitude",
+  "hrv",
+  "hrzone",
+  "hrrecovery",
 ] as const;
 export type SignalKind = (typeof signalKinds)[number];
 export const signals: Record<
@@ -46,6 +61,71 @@ export const signals: Record<
     unit: "g",
     color: "#aa666c",
     gapMs: 1500,
+  },
+  phoneaccx: {
+    name: "Phone acceleration X",
+    unit: "g",
+    color: "#aa666c",
+    gapMs: 500,
+  },
+  phoneaccy: {
+    name: "Phone acceleration Y",
+    unit: "g",
+    color: "#7b7560",
+    gapMs: 500,
+  },
+  phoneaccz: {
+    name: "Phone acceleration Z",
+    unit: "g",
+    color: "#607f81",
+    gapMs: 500,
+  },
+  phonegyrox: {
+    name: "Phone rotation X",
+    unit: "rad/s",
+    color: "#8f708b",
+    gapMs: 500,
+  },
+  phonegyroy: {
+    name: "Phone rotation Y",
+    unit: "rad/s",
+    color: "#6b7f99",
+    gapMs: 500,
+  },
+  phonegyroz: {
+    name: "Phone rotation Z",
+    unit: "rad/s",
+    color: "#938158",
+    gapMs: 500,
+  },
+  speed: { name: "Speed", unit: "km/h", color: "#427e9b", gapMs: 6000 },
+  pace: { name: "Pace", unit: "min/km", color: "#8b6c96", gapMs: 6000 },
+  distance: { name: "Distance", unit: "m", color: "#4e8275", gapMs: 6000 },
+  cadence: {
+    name: "Cadence",
+    unit: "steps/min",
+    color: "#99733c",
+    gapMs: 6000,
+  },
+  steps: { name: "Steps", unit: "steps", color: "#7c8249", gapMs: 6000 },
+  altitude: {
+    name: "Elevation change",
+    unit: "m",
+    color: "#6c8599",
+    gapMs: 6000,
+  },
+  hrv: { name: "HRV · RMSSD", unit: "ms", color: "#806da0", gapMs: 10000 },
+  hrzone: {
+    name: "Heart rate zone",
+    unit: "zone",
+    color: "#b27949",
+    gapMs: 3500,
+  },
+  hrrecovery: {
+    name: "Heart rate recovery",
+    unit: "bpm drop",
+    color: "#628d76",
+    gapMs: 6000,
   },
 };
 const id = z
@@ -93,6 +173,13 @@ export const SessionSchema = z
     timePolicy: z.enum(["receipt-relative-v1", "sensor-relative-v1"]),
     state: z.enum(["recording", "ended"]),
     events: z.array(EventSchema).max(1000),
+    training: z
+      .object({
+        maxHeartRate: z.number().int().min(100).max(240).optional(),
+        phoneSensors: z.boolean(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type Session = z.infer<typeof SessionSchema>;
@@ -133,9 +220,9 @@ export type Batch = z.infer<typeof BatchSchema>;
 export const PanelSchema = z
   .object({
     id,
-    title: z.string().min(1).max(100),
+    title: z.string().min(1).max(500),
     sessionIds: z.array(id).min(1).max(4),
-    signalKinds: z.array(z.enum(signalKinds)).min(1).max(3),
+    signalKinds: z.array(z.enum(signalKinds)).min(1).max(8),
     axis: z.enum(["shared", "separate", "normalized"]),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     lineWidth: z.number().min(1).max(5),

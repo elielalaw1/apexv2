@@ -1,3 +1,45 @@
+# Training streams and contextual graph help — 10 November 2026
+
+Implemented iOS phone acquisition using Core Motion/Core Location: user acceleration magnitude and XYZ (g, gravity removed), rotation XYZ (rad/s), GPS speed (km/h), pace (min/km), estimated cumulative GPS distance (m), steps, cadence (steps/min) and relative barometric elevation (m). Location coordinates stay on the phone. Location/Motion usage descriptions are in app config and the native build. Permissions/unsupported sensors produce status messages; unavailable pace/GPS intervals are not fabricated. Motion runs at 10 Hz; phone auto-lock is disabled only while these streams are active and restored on stop. Foreground collection is the supported MVP path.
+
+Mobile supports optional known maximum heart rate and Work/Rest markers. The shared API computes zones (0 below 50%; zones 1–5 at 50/60/70/80/90% of entered max), time in zones with valid coverage, 30-beat rolling RMSSD and recovery relative to each Rest marker. RMSSD windows with gaps, uncertain beats, RR outside 250–2000 ms or adjacent changes above 20% are omitted. This is an explicit exploratory method, not a validated readiness/stress classifier. Recovery summaries require readings within 2 seconds of 60/120-second targets and stop at the next phase. Computed metrics are not stored as raw sensor samples; raw CSV exports remain raw. Existing recordings gain derived graphs only when sufficient source data/configuration exists; no historic phone streams are invented.
+
+Graphs support up to eight overlaid signals. Same-unit graphs share an axis, two units have separate labelled axes, and more than two units use explicitly labelled visible-window z-score normalization with original units in hover readouts. Every graph has an accessible info disclosure; combined help lists each source and adapts to relationships such as HR vs pace, inverse speed/pace, terrain context, derived HRV/RR and phone vs chest movement. Pace is formatted m:ss; small motion values retain precision. Cumulative values show totals/latest values rather than averages.
+
+Verified: 19 unit/integrity tests, five browser tests, web production build, mobile TypeScript and signed native iOS Release build. Synthetic phone streams passed ingestion, derived-series inventory, exact recovery/zone values, 3-signal normalized overlay, live help updates, reload and narrow-layout checks. Desktop info-card screenshot visually reviewed. The updated Release build is installed on the connected iPhone as APEX MVP, and devicectl confirmed launch. Phone preview state is cleared between recordings so a new session does not inherit the previous phone readout. Real outdoor GPS, Motion permission denial, pedometer/barometer accuracy and a complete physical phone-to-web workout still require an on-device exercise trial.
+
+References: Apple Core Motion https://developer.apple.com/documentation/coremotion and Core Location https://developer.apple.com/documentation/corelocation; Polar H10 SDK capabilities https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/products/PolarH10.md; Polar resting HRV context https://support.polar.com/en/recovery-pro.
+
+---
+
+# Physical iPhone installation — 10 November 2026
+
+The current MVP was built successfully in Release configuration with the Polar native module and an embedded Hermes bundle. Installed on the connected iPhone 17 running iOS 26.6.2 as **APEX MVP**, bundle ID `se.apex.vip.mvp`, using the owner's Apple development team. The older `se.apex.vip` app was signed by a different team and iOS rejected an in-place upgrade, so it was preserved alongside the new app. Its local recordings were not deleted or migrated.
+
+The new build embeds `http://192.168.1.14:3003`, verified reachable on the Mac's LAN interface. Signature verification passed and the provisioning profile includes the connected phone. The user confirmed the app opened and a session was started after installation. This confirms launch from the user’s observation; completed H10 collection and web upload have not yet been verified.
+
+---
+
+# Visual refinement — 10 November 2026
+
+The MVP web interface now uses a neutral palette, system typography, a compact session list, larger signal summaries and quieter chart controls. Repeated instructions and single-signal legends are removed. Built-in legacy labels are displayed in English, including composed session titles. Mobile layout, keyboard controls, drag overlays, shared cursor, zoom and local preferences are preserved. Cursor readouts reserve space to avoid shifting the charts. Axis labels retain enough precision to distinguish near-constant values.
+
+Verified: production build and TypeScript; four browser tests across the MVP and legacy analysis views, followed by both MVP tests after final visual adjustments. Desktop, narrow viewport, comparison and customization screenshots reviewed.
+
+---
+
+# MVP — 10 november 2026
+
+Webb: ingen inloggning, sessioner grupperade på sessionsnamn, deltagarval och en dashboard med alla inspelade signaler. Drag, omordning, parvis överlagring, signalval, delad zoom/markör, sparad lokal layout och rådataexport. Introduktioner, konto, administration och formulär är borttagna från standardflödet.
+
+Mobil: anslut bandet, ange namn/session, starta, avsluta och skicka. Namn accepterar Unicode och mellanslag; separat stabilt ID. Offlineinspelningar och misslyckade överföringar behålls för nytt försök. Ingen inloggning eller självskattning behövs. Samma ingest-validering och kvitterade utkorg används.
+
+Verifierat: webb- och mobiltypkontroll, webbens produktionsbygge, iOS/Hermes-export, 13 enhets-/integritetstester och hela webbläsarsviten med 4 tester. MVP-proven täcker inloggningsfri syntetisk fullsignalöverföring, sessionsgruppering, deltagarval, verkligt pointer-drag, separata enheter, delning av grafer, sparande/omladdning, signalval, avbryt/återställ, zoom, CSV utan saknade/dubblerade samples, smal vy samt saknad inspelning och pass utan samples. Äldre analysytans två tester passerar också. Webbläsarproven använder en separat databas per körning och separat MVP-arbetsyta. Fysisk iPhone-installation och Polar H10-inspelning har inte testats. Tidigare signeringsbegränsning behöver fortfarande lösas för telefoninstallation. Bygge och iOS-export ersätter inte ett hårdvaruprov.
+
+---
+
+Tidigare status (historik):
+
 # HR/RR/EKG/H10 XYZ — 28 oktober 2026
 
 Appen har nu livevärden för puls, RR, EKG, rå X/Y/Z och härledd accelerationsmagnitud, med begränsade förhandskurvor för EKG och magnitud. Alla sju signalerna sparas lokalt under en inspelning och synkas med samma kvitterade utkorg som tidigare. Lokala pass visar antal per signal. **View session on web** öppnar det synkade passet; webben visar samtliga signaler och rå-CSV.

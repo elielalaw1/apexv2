@@ -1,3 +1,17 @@
+## Current MVP install — 10 November 2026
+
+The latest Release build is installed as **APEX MVP** (`se.apex.vip.mvp`). It has its JavaScript embedded and does not require Metro. It is separate from the old `apexVIP` app because that app was signed with a different Apple team. Keep the old app if you need its local recordings.
+
+First launch: trust the owner's developer profile under Settings → General → VPN & Device Management. Allow Bluetooth and Local Network when prompted. The current server address is `http://192.168.1.14:3003`, adjustable under **Server settings**. Use the same Wi-Fi as the Mac.
+
+Current flow: **Find Polar H10 → connect → Your name + Session → Start recording → Finish and send to web**. There is no login or questionnaire. Failed uploads remain on the phone and can be retried with **Send saved recordings**. The web opens at sessions → participants → dashboard.
+
+For subsequent local builds of this separately installed app, use the owner's development team and `PRODUCT_BUNDLE_IDENTIFIER=se.apex.vip.mvp`; the ignored native Info.plist display name is **APEX MVP**. Do not delete the old app to work around a signing mismatch.
+
+The remainder below describes previous setup and is retained as historical reference.
+
+---
+
 # APEX på en fysisk iPhone
 
 App: `apps/mobile`. Mätningen omfattar puls (HR), RR-intervall, EKG och H10-accelerationens råa X/Y/Z samt magnitud. Passet sparas lokalt och skickas manuellt till samma API och databas som webbens sessionslista. Samtliga signaler har observerats i appens förhandsvisning på fysisk iPhone; ett fullständigt inspelnings-/synkprov verifieras separat.

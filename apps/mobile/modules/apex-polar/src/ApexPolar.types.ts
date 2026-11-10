@@ -60,6 +60,13 @@ export type PolarNativeErrorPayload = {
 };
 
 export type ApexPolarModuleEvents = {
+  phoneSampleReceived: (payload: {
+    signal: string;
+    value: number;
+    timestamp: number;
+    quality?: "measured" | "missing" | "suspect";
+  }) => void;
+  phoneSensorStatus: (payload: { message: string }) => void;
   deviceDiscovered: (payload: PolarDevicePayload) => void;
   connectionStateChanged: (payload: PolarConnectionStatePayload) => void;
   heartRateSampleReceived: (payload: PolarHeartRateSamplePayload) => void;
@@ -80,6 +87,8 @@ export type ApexPolarModuleEvents = {
 };
 
 export interface ApexPolarNativeModuleContract {
+  startPhoneSensors(): Promise<void>;
+  stopPhoneSensors(): Promise<void>;
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
   connectToDevice(deviceId: string): Promise<void>;

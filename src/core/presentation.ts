@@ -18,5 +18,11 @@ const legacy: Record<string, string> = {
   Beredskap: "Readiness",
 };
 export function displayText(text: string): string {
-  return legacy[text] ?? text;
+  return (
+    legacy[text] ??
+    text
+      .split(" · ")
+      .map((part) => legacy[part] ?? part)
+      .join(" · ")
+  );
 }

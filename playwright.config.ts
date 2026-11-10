@@ -16,7 +16,8 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     env: {
-      APEX_DB_PATH: "data/browser-test.sqlite",
+      APEX_DB_PATH: `data/browser-test-${process.pid}.sqlite`,
+      APEX_MVP_WORKSPACE: "mvp-browser-lab",
       APEX_E2E_ISOLATED: process.env.APEX_E2E_PRODUCTION === "1" ? "0" : "1",
     },
     timeout: 120000,

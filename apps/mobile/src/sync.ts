@@ -59,10 +59,20 @@ export async function synchronize(
           );
           if (!template)
             throw Error("Local questionnaire definition is missing");
-          await request(server, "templates", template, token);
+          await request(
+            server,
+            token ? "templates" : "mvp/templates",
+            template,
+            token,
+          );
           registered.add(key);
         }
-        return request<Ack>(server, "ingest", batch, token);
+        return request<Ack>(
+          server,
+          token ? "ingest" : "mvp/ingest",
+          batch,
+          token,
+        );
       },
       acknowledge,
       onProgress,

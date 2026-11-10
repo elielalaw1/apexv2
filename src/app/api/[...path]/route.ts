@@ -12,6 +12,8 @@ import {
   saveLayout,
   saveTemplate,
   rawPage,
+  signalInventory,
+  metrics,
 } from "@/server/store";
 import { getDb, sha } from "@/server/db";
 import { defaultTemplate, signalKinds, SignalKind } from "@/core/contract";
@@ -21,7 +23,16 @@ export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ path: string[] }> };
 async function handle(req: Request, ctx: Context) {
   try {
-    const path = (await ctx.params).path.join("/");
+    const segments = (await ctx.params).path;
+    const publicMvp = segments[0] === "mvp";
+    if (publicMvp && process.env.APEX_MVP_ENABLED === "false")
+      throw new ApiError(403, "MVP workspace is disabled");
+    const path = (publicMvp ? segments.slice(1) : segments).join("/");
+    if (
+      publicMvp &&
+      !["me", "sessions", "ingest", "templates"].includes(path.split("/")[0])
+    )
+      throw new ApiError(404, "Resource not found");
     const method = req.method;
     const url = new URL(req.url);
     if (method !== "GET") checkOrigin(req);
@@ -44,7 +55,9 @@ async function handle(req: Request, ctx: Context) {
         token,
       });
     }
-    const user = await currentUser(req);
+    const user = publicMvp
+      ? { email: "", workspace: process.env.APEX_MVP_WORKSPACE ?? "demo-lab" }
+      : await currentUser(req);
     const workspace = user.workspace;
     if (path === "auth/logout" && method === "POST") {
       const jar = await cookies();
@@ -80,13 +93,9 @@ async function handle(req: Request, ctx: Context) {
       const [, id, action] = path.split("/");
       const session = requireSession(workspace, id);
       if (action === "signals")
-        return NextResponse.json(
-          getDb()
-            .prepare(
-              "SELECT signal, count(*) AS count FROM samples WHERE session_id=? GROUP BY signal",
-            )
-            .all(id),
-        );
+        return NextResponse.json(signalInventory(workspace, id));
+      if (action === "metrics")
+        return NextResponse.json(metrics(workspace, id));
       if (action === "series") {
         const signal = url.searchParams.get("signal") as SignalKind;
         if (!signalKinds.includes(signal))

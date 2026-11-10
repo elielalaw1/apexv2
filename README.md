@@ -4,6 +4,30 @@
 
 En ny, separat APEX-kodbas för mätning och analys. Webbens första sammanhängande milstolpe är byggd med ett riktigt API och lokal SQLite. Expo-appen har insamling av HR, RR, EKG och H10-acceleration (rå XYZ och magnitud), beständig utkorg och återanvänder den tidigare Polar-bryggan.
 
+## Training signals and graph help — 10 November 2026
+
+**APEX MVP** on iPhone can record phone movement/rotation, GPS speed, pace and estimated distance, steps/cadence and relative elevation alongside H10 data. Enable **Phone sensors**, grant Location and Motion & Fitness permissions, and keep the phone fixed in position with the app open. GPS needs a usable outdoor signal. Coordinates are not uploaded. Enter a known **Maximum heart rate** to enable zones; leave blank if unknown. During recording, use **Mark Work** and **Mark Rest**. Continue recording through 60–120 seconds of rest for recovery summaries.
+
+The dashboard shows available raw and computed graphs. **Training insights** contains zone durations, data coverage and 60/120-second recovery values. HRV is a quality-screened rolling 30-beat RMSSD, not an automatic stress/readiness result. Every graph has an **ⓘ** disclosure, including contextual explanations for combined signals. Up to eight signals can be combined; comparisons with more than two units are explicitly normalized. **Export CSV** exports recorded raw samples; computed metrics remain derived views.
+
+## MVP inför presentationen — 10 november 2026
+
+Standardwebben kräver ingen inloggning. Flöde: **sessioner → deltagare → dashboard**. Inspelningar med samma sessionsnamn samlas tillsammans. Deltagarens namn används som etikett; mobilen skapar ett stabilt ID från namnet. Ingen separat deltagaradministration eller självskattning behövs.
+
+Dashboarden visar alla signaler som faktiskt finns i inspelningen. H10-insamlingen omfattar puls, RR, EKG och rå acceleration X/Y/Z samt härledd accelerationsmagnitud. Grafer kan dras med handtaget till en annan graf för jämförelse av två signaler. Olika enheter har varsin axel. Släpp på ett korthuvud för att ordna om; **Choose graphs** visar signalval, pilar för ordning och ett alternativ till drag. **Separate graphs** delar en jämförelse. Layouten sparas per inspelning i webbläsaren. CSV innehåller rådata över alla exportsidor.
+
+Mobilflöde: **anslut H10 → namn och session → Start recording → Finish and send to web**. Vid nätverksfel behålls inspelningen och kvitterade paket i den beständiga utkorgen. **Send saved recordings** försöker igen. Serveradress finns under **Server settings**. Inspelning kan startas utan nätverk. Native development build krävs fortfarande; fysisk H10-insamling och installation på iPhone är inte verifierade i denna ändring.
+
+Starta med Node 22.13+:
+
+```sh
+npm run dev:lan
+```
+
+Öppna http://127.0.0.1:3003 på Macen. På telefonen används Macens Wi-Fi-adress med port 3003, samma Wi-Fi och lokal nätverksbehörighet. Befintliga inspelningar bevaras. Listan uppdateras var tionde sekund eller med **Refresh**.
+
+Det öppna MVP-API:t ligger under `/api/mvp/` och använder den gemensamma arbetsytan `demo-lab`. Det är avsiktligt öppet på serverns nätverk för presentationen. `APEX_MVP_ENABLED=false` stänger dessa routes; `APEX_MVP_WORKSPACE` väljer en separat arbetsyta. De tidigare autentiserade API-rutterna och `/advanced` finns kvar separat. Följande äldre dokumentation beskriver även tidigare UI-flöden och är historik.
+
 ## Starta webben
 
 Node **22.13 eller senare** krävs för `node:sqlite`.

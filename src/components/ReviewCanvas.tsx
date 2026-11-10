@@ -1,4 +1,5 @@
 "use client";
+import { formatSignalValue } from "@/core/format";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownIcon,
@@ -8,6 +9,7 @@ import {
   ArrowsSplitIcon,
   CheckIcon,
   MagnifyingGlassPlusIcon,
+  InfoIcon,
 } from "@phosphor-icons/react";
 import { Layout, Series, Session, SignalKind, signals } from "@/core/contract";
 import {
@@ -17,6 +19,7 @@ import {
   combineCards,
   moveCard,
 } from "@/core/reviewLayout";
+import SignalInfo from "./SignalInfo";
 import Chart, { Range, timeLabel } from "./Chart";
 
 type Drag = {
@@ -65,6 +68,7 @@ export default function ReviewCanvas({
   onSelect: (range: Range | null) => void;
   notice: string;
 }) {
+  const [infoCard, setInfoCard] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const origin = useRef<{
     id: string;
@@ -78,6 +82,7 @@ export default function ReviewCanvas({
   useEffect(() => {
     function cancel(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        setInfoCard(null);
         origin.current = null;
         setDrag(null);
       }
@@ -95,7 +100,7 @@ export default function ReviewCanvas({
   function combine(from: string, to: string) {
     const next = combineCards(cards, from, to);
     if (next === cards) return;
-    update(next, "Signals combined. Each unit keeps its own axis.", to);
+    update(next, "Graphs combined.", to);
     requestAnimationFrame(() =>
       document.getElementById(`card-title-${to}`)?.focus(),
     );
@@ -113,7 +118,7 @@ export default function ReviewCanvas({
           if (c.kind !== "signal" || c.signals.length === 1) return [];
           return [{ ...c, signals: c.signals.filter((k) => k !== kind) }];
         }),
-        "Card hidden. Add it again at any time.",
+        "Graph hidden.",
       );
     else
       update(
@@ -123,7 +128,7 @@ export default function ReviewCanvas({
             ? { id: crypto.randomUUID(), kind }
             : { id: crypto.randomUUID(), kind: "signal", signals: [kind] },
         ],
-        "Card added.",
+        "Graph added.",
       );
   }
   function move(id: string, delta: number) {
@@ -167,7 +172,7 @@ export default function ReviewCanvas({
       const target = el?.dataset.dropCard;
       if (target && target !== o.id && cards.some((c) => c.id === target)) {
         if (el.dataset.dropAction === "combine") combine(o.id, target);
-        else update(moveCard(cards, o.id, target), "Card moved.", o.id);
+        else update(moveCard(cards, o.id, target), "Graph moved.", o.id);
       }
     }
     setDrag(null);
@@ -194,11 +199,7 @@ export default function ReviewCanvas({
         >
           <div className="canvas-customizer-heading">
             <div>
-              <h2>Make room for what matters.</h2>
-              <p>
-                Choose your cards, then drag to arrange. Drop one graph onto
-                another to combine them.
-              </p>
+              <h2>Choose graphs</h2>
             </div>
             <button
               className="primary"
@@ -210,7 +211,7 @@ export default function ReviewCanvas({
             </button>
           </div>
           <fieldset>
-            <legend>Show in this session</legend>
+            <legend className="sr-only">Visible graphs</legend>
             {[
               ...available,
               ...(reports ? ["reports" as const] : []),
@@ -245,7 +246,7 @@ export default function ReviewCanvas({
             })}
           </fieldset>
           <div className="canvas-customizer-foot">
-            <span>Changes are saved for this session on this browser.</span>
+            <span className="sr-only">Saved on this browser.</span>
             <button onClick={onReset}>Restore default</button>
             <button onClick={onCancel}>Cancel</button>
           </div>
@@ -254,7 +255,7 @@ export default function ReviewCanvas({
       <div className="canvas-shared-controls">
         <span>
           <span className="canvas-linked-dot" />
-          Shared time & cursor{" "}
+          Timeline{" "}
           <strong>
             {timeLabel(range[0])}–{timeLabel(range[1])}
           </strong>
@@ -287,11 +288,8 @@ export default function ReviewCanvas({
       </p>
       {!cards.length && (
         <div className="simple-empty">
-          <h2>Start with a card</h2>
-          <p>
-            Choose a signal or information card above. You can change this at
-            any time.
-          </p>
+          <h2>No graphs selected</h2>
+          <p>Select a signal above.</p>
         </div>
       )}
       <div className="review-card-grid" aria-label="Session cards">
@@ -299,6 +297,29 @@ export default function ReviewCanvas({
           const title = cardTitle(card),
             signal = card.kind === "signal" ? card.signals[0] : null;
           const summary = signal ? summaries?.[signal]?.summary : null;
+          const last = signal
+            ? summaries?.[signal]?.points
+                .filter((p) => p.quality === "measured")
+                .at(-1)?.value
+            : null;
+          const latest =
+            !!signal &&
+            [
+              "distance",
+              "steps",
+              "altitude",
+              "pace",
+              "speed",
+              "hrzone",
+            ].includes(signal);
+          const primaryLabel =
+            signal === "distance" || signal === "steps"
+              ? "Total recorded"
+              : signal === "altitude"
+                ? "Final change"
+                : latest
+                  ? "Last recorded"
+                  : "Average";
           const combinable = cards.filter((other) => canCombine(card, other));
           return (
             <article
@@ -308,14 +329,14 @@ export default function ReviewCanvas({
               data-drop-card={card.id}
               data-drop-action="move"
               aria-label={title}
-              className={`canvas-card${card.kind === "signal" ? " simple-signal-panel" : ""}${card.kind === "signal" && (card.signals.length === 2 || chartCount === 1) ? " canvas-card-wide" : ""}${drag?.id === card.id ? " canvas-card-dragging" : ""}${drag?.target === card.id ? " canvas-card-over" : ""}${lastMoved === card.id ? " canvas-card-moved" : ""}`}
+              className={`canvas-card${card.kind === "signal" ? " simple-signal-panel" : ""}${card.kind === "signal" && (card.signals.length > 1 || chartCount === 1) ? " canvas-card-wide" : ""}${drag?.id === card.id ? " canvas-card-dragging" : ""}${drag?.target === card.id ? " canvas-card-over" : ""}${lastMoved === card.id ? " canvas-card-moved" : ""}`}
             >
               <header className="canvas-card-header">
-                {editing && (
+                {
                   <button
                     className="canvas-drag-handle"
                     aria-label={`Drag ${title}`}
-                    title="Drag to move, or use the arrow buttons"
+                    title="Drag onto a graph to compare. Drop on a header to reorder."
                     onPointerDown={(e) => startDrag(e, card.id)}
                     onPointerMove={moveDrag}
                     onPointerUp={endDrag}
@@ -326,10 +347,31 @@ export default function ReviewCanvas({
                   >
                     <DotsSixVerticalIcon />
                   </button>
-                )}
+                }
                 <h2 id={`card-title-${card.id}`} tabIndex={-1}>
+                  {signal && (
+                    <span
+                      className="mvp-signal-dot"
+                      style={{ background: signals[signal].color }}
+                      aria-hidden="true"
+                    />
+                  )}
                   {title}
                 </h2>
+                {card.kind === "signal" && (
+                  <button
+                    className="signal-info-toggle"
+                    aria-label={`About ${title}`}
+                    aria-expanded={infoCard === card.id}
+                    aria-controls={`signal-info-${card.id}`}
+                    title="About these signals"
+                    onClick={() =>
+                      setInfoCard(infoCard === card.id ? null : card.id)
+                    }
+                  >
+                    <InfoIcon />
+                  </button>
+                )}
                 {editing && (
                   <div className="canvas-card-actions">
                     <button
@@ -360,11 +402,18 @@ export default function ReviewCanvas({
                   </div>
                 )}
               </header>
+              {card.kind === "signal" && infoCard === card.id && (
+                <SignalInfo
+                  kinds={card.signals}
+                  id={`signal-info-${card.id}`}
+                />
+              )}
               {card.kind === "signal" && (
                 <>
-                  {editing && (
+                  {(editing ||
+                    (card.kind === "signal" && card.signals.length > 1)) && (
                     <div className="canvas-combine-controls">
-                      {card.signals.length === 2 ? (
+                      {card.signals.length > 1 ? (
                         <button
                           onClick={() => {
                             const next = cards.flatMap((c) =>
@@ -376,11 +425,7 @@ export default function ReviewCanvas({
                                   }))
                                 : [c],
                             );
-                            update(
-                              next,
-                              "Signals split into separate graphs.",
-                              card.id,
-                            );
+                            update(next, "Graphs separated.", card.id);
                           }}
                         >
                           <ArrowsSplitIcon />
@@ -408,57 +453,70 @@ export default function ReviewCanvas({
                       )}
                     </div>
                   )}
-                  {card.signals.length === 2 ? (
-                    <p className="canvas-axis-note">
-                      Shared time · {signals[card.signals[0]].name} (
-                      {signals[card.signals[0]].unit}) on the left ·{" "}
-                      {signals[card.signals[1]].name} (
-                      {signals[card.signals[1]].unit}){" "}
-                      {signals[card.signals[0]].unit ===
-                      signals[card.signals[1]].unit
-                        ? "on the same axis"
-                        : "on the right"}
-                      . Each signal retains its original unit.
-                    </p>
-                  ) : (
+                  {card.signals.length > 1 ? null : (
                     <div className="canvas-card-summary">
                       <span>
-                        Session average{" "}
+                        <span className="mvp-stat-label">{primaryLabel}</span>
                         <strong>
-                          {summary?.mean?.toFixed(
-                            signal === "phoneacc" ? 2 : 0,
-                          ) ?? "—"}{" "}
-                          {signal && signals[signal].unit}
+                          {signal
+                            ? formatSignalValue(
+                                signal,
+                                latest ? last : summary?.mean,
+                              )
+                            : "—"}{" "}
+                          <small>{signal && signals[signal].unit}</small>
                         </strong>
                       </span>
-                      <span>
-                        Session peak{" "}
-                        <strong>
-                          {summary?.max?.toFixed(
-                            signal === "phoneacc" ? 2 : 0,
-                          ) ?? "—"}{" "}
-                          {signal && signals[signal].unit}
-                        </strong>
-                      </span>
+                      {!latest && (
+                        <span>
+                          <span className="mvp-stat-label">Peak</span>
+                          <strong>
+                            {signal
+                              ? formatSignalValue(signal, summary?.max)
+                              : "—"}{" "}
+                            <small>{signal && signals[signal].unit}</small>
+                          </strong>
+                        </span>
+                      )}
                     </div>
+                  )}
+                  {new Set(card.signals.map((k) => signals[k].unit)).size >
+                    2 && (
+                    <p className="normalized-label">Normalized · z-score</p>
                   )}
                   <Chart
                     panel={{
                       id: `panel-${card.id}`,
                       title,
                       sessionIds: [session.id],
-                      signalKinds: card.signals,
+                      signalKinds: [...card.signals].sort((a, b) =>
+                        a === card.signals[0]
+                          ? -1
+                          : b === card.signals[0]
+                            ? 1
+                            : Number(
+                                signals[a].unit ===
+                                  signals[card.signals[0]].unit,
+                              ) -
+                              Number(
+                                signals[b].unit ===
+                                  signals[card.signals[0]].unit,
+                              ),
+                      ),
                       axis:
                         new Set(card.signals.map((k) => signals[k].unit)).size >
                         1
-                          ? "separate"
+                          ? new Set(card.signals.map((k) => signals[k].unit))
+                              .size > 2
+                            ? "normalized"
+                            : "separate"
                           : "shared",
                       color: signals[card.signals[0]].color,
                       lineWidth: 2,
                       opacity: 1,
                       visible: true,
                       width: 2,
-                      height: 390,
+                      height: 280,
                     }}
                     sessions={[session]}
                     layout={layout}
@@ -470,19 +528,19 @@ export default function ReviewCanvas({
                     onSelect={onSelect}
                     dragMode="zoom"
                     compact
+                    apiPrefix="mvp/"
                   />
                 </>
               )}
               {card.kind === "reports" && reports}
               {card.kind === "timeline" && timeline}
-              {editing && source && canCombine(source, card) && (
+              {source && canCombine(source, card) && (
                 <div
                   className={`canvas-combine-zone${drag?.target === card.id && drag.combine ? " active" : ""}`}
                   data-drop-card={card.id}
                   data-drop-action="combine"
                 >
                   <span>Drop to combine graphs</span>
-                  <small>Two signals. One shared timeline.</small>
                 </div>
               )}
             </article>

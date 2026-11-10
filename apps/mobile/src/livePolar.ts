@@ -1,5 +1,5 @@
 import Polar from "../modules/apex-polar";
-import { Sample, SignalKind } from "../../../src/core/contract";
+import { Sample, SignalKind, signals } from "../../../src/core/contract";
 import { polarSignals, PolarSamples } from "../../../src/core/polarSamples";
 export type LiveSignal = {
   value: number | null;
@@ -10,13 +10,18 @@ export type LiveSignal = {
 };
 const empty = (): Record<string, LiveSignal> =>
   Object.fromEntries(
-    polarSignals.map((s) => [
+    (Object.keys(signals) as SignalKind[]).map((s) => [
       s,
       { value: null, receivedAt: 0, count: 0, points: [] },
     ]),
   );
 let latest = empty();
 let previewKey = "";
+export function resetPhoneLive() {
+  const blank = empty();
+  for (const kind of Object.keys(signals))
+    if (!(polarSignals as readonly string[]).includes(kind)) latest[kind] = blank[kind];
+}
 export function liveSnapshot() {
   return { ...latest };
 }

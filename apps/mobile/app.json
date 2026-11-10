@@ -15,7 +15,9 @@
         "UIBackgroundModes": [
           "bluetooth-central"
         ],
-        "NSLocalNetworkUsageDescription": "Connect to your local apexVIP development server."
+        "NSLocalNetworkUsageDescription": "Connect to your local apexVIP development server.",
+        "NSMotionUsageDescription": "Record phone movement, cadence, steps and elevation during your workout.",
+        "NSLocationWhenInUseUsageDescription": "Measure workout speed, pace and distance. Coordinates are processed on your phone and are not uploaded."
       }
     },
     "android": {

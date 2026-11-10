@@ -6,7 +6,7 @@ const CardSchema = z.discriminatedUnion("kind", [
     .object({
       id: z.string().min(1).max(128),
       kind: z.literal("signal"),
-      signals: z.array(z.enum(signalKinds)).min(1).max(2),
+      signals: z.array(z.enum(signalKinds)).min(1).max(8),
     })
     .strict(),
   z
@@ -18,7 +18,7 @@ const CardSchema = z.discriminatedUnion("kind", [
 ]);
 export type ReviewCard = z.infer<typeof CardSchema>;
 const PreferenceSchema = z
-  .object({ version: z.literal(1), cards: z.array(CardSchema).min(1).max(7) })
+  .object({ version: z.literal(1), cards: z.array(CardSchema).min(1).max(40) })
   .strict();
 export function cardTitle(card: ReviewCard) {
   return card.kind === "signal"
@@ -75,7 +75,7 @@ export function canCombine(a: ReviewCard, b: ReviewCard) {
     a.id !== b.id &&
     a.kind === "signal" &&
     b.kind === "signal" &&
-    a.signals.length + b.signals.length <= 2
+    a.signals.length + b.signals.length <= 8
   );
 }
 export function combineCards(

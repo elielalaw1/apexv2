@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./session-workspace.css";
 import "./review-customization.css";
+import "./mvp-appearance.css";
 export const metadata: Metadata = {
   title: "APEX · Session review",
   description: "Record and analyze physiological signals in one workspace.",

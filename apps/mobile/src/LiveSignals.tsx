@@ -1,3 +1,4 @@
+import { formatSignalValue } from "../../../src/core/format";
 import React, { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { signals } from "../../../src/core/contract";
@@ -75,7 +76,14 @@ export default function LiveSignals({
           ? "Raw data is saved locally. Finish the session to upload it."
           : "Preview only. Tap Start recording to save a session."}
       </Text>
-      {polarSignals.map((kind) => {
+      {[
+        ...polarSignals,
+        ...(Object.keys(signals) as (keyof typeof signals)[]).filter(
+          (k) =>
+            !polarSignals.includes(k as (typeof polarSignals)[number]) &&
+            data[k]?.count > 0,
+        ),
+      ].map((kind) => {
         const s = data[kind];
         const fresh = !!s?.receivedAt && now - s.receivedAt < 3500;
         const label = signals[kind];
@@ -95,7 +103,7 @@ export default function LiveSignals({
             </View>
             <Text style={styles.value}>
               {fresh && s?.value !== null
-                ? s.value.toFixed(kind === "h10acc" ? 1 : 0)
+                ? formatSignalValue(kind, s.value)
                 : "—"}
               <Text style={styles.unit}> {label.unit}</Text>
             </Text>

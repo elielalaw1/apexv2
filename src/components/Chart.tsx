@@ -1,4 +1,5 @@
 "use client";
+import { formatSignalValue } from "@/core/format";
 import { useEffect, useRef, useState } from "react";
 import { displayText } from "@/core/presentation";
 import { Panel, Series, Session, Layout, signals } from "@/core/contract";
@@ -44,6 +45,7 @@ export default function Chart({
   onSelect,
   dragMode,
   compact = false,
+  apiPrefix = "",
 }: {
   panel: Panel;
   sessions: Session[];
@@ -56,6 +58,7 @@ export default function Chart({
   onSelect: (r: Range | null) => void;
   dragMode: "select" | "zoom" | "pan";
   compact?: boolean;
+  apiPrefix?: string;
 }) {
   const [result, setResult] = useState<{ signature: string; series: Series[] }>(
       { signature: "", series: [] },
@@ -91,6 +94,7 @@ export default function Chart({
   }, [panel.visible, error, layout.alignment, layout.anchorLabel]);
   const picked = sessions.filter((s) => panel.sessionIds.includes(s.id));
   const signature = JSON.stringify([
+    apiPrefix,
     panel.sessionIds,
     panel.signalKinds,
     range,
@@ -110,7 +114,7 @@ export default function Chart({
             from = Math.max(0, range[0] - o),
             to = Math.max(from, Math.min(session.durationMs, range[1] - o));
           return api<Series>(
-            `sessions/${session.id}/series?signal=${signal}&from=${from}&to=${to}`,
+            `${apiPrefix}sessions/${session.id}/series?signal=${signal}&from=${from}&to=${to}`,
           );
         }),
       ),
@@ -146,7 +150,7 @@ export default function Chart({
             from = Math.max(0, selection[0] - o),
             to = Math.max(from, Math.min(session.durationMs, selection[1] - o));
           return api<Series>(
-            `sessions/${session.id}/series?signal=${signal}&from=${from}&to=${to}`,
+            `${apiPrefix}sessions/${session.id}/series?signal=${signal}&from=${from}&to=${to}`,
           );
         }),
       ),
@@ -171,6 +175,7 @@ export default function Chart({
   const x = (t: number) =>
     left + ((t - range[0]) / (range[1] - range[0])) * plot;
   const domains = series.map((s) => {
+    if (s.signal === "hrzone" && panel.axis !== "normalized") return [0, 5];
     const group =
       panel.axis === "normalized"
         ? series
@@ -187,11 +192,25 @@ export default function Chart({
             ]
           : [g.summary.min, g.summary.max!],
     );
-    const lo = vals.length ? Math.min(...vals) : 0,
-      hi = vals.length ? Math.max(...vals) : 1,
+    const lo = vals.length
+        ? vals.reduce((v, n) => Math.min(v, n), Infinity)
+        : 0,
+      hi = vals.length ? vals.reduce((v, n) => Math.max(v, n), -Infinity) : 1,
       pad = Math.max((hi - lo) * 0.12, 0.1);
     return [lo - pad, hi + pad];
   });
+  const zoneAxis =
+    panel.axis !== "normalized" && series.some((s) => s.signal === "hrzone");
+  const ticks = zoneAxis ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4];
+  const tickSteps = ticks.length - 1;
+  const tickDigits = (i: number) => {
+    if (panel.axis === "normalized") return 1;
+    const step = ((domains[i]?.[1] ?? 1) - (domains[i]?.[0] ?? 0)) / 4;
+    return Math.max(
+      series[i]?.signal === "phoneacc" ? 2 : 0,
+      Math.min(4, Math.max(0, Math.ceil(-Math.log10(step)))),
+    );
+  };
   const y = (v: number, i: number) => {
     const [lo, hi] = domains[i] ?? [0, 1];
     return top + h - ((v - lo) / (hi - lo)) * h;
@@ -216,6 +235,11 @@ export default function Chart({
       "#706bb0",
     ])[sessionIndex % 4];
   };
+  const lineDash = (i: number) =>
+    i >= panel.signalKinds.length ||
+    series.slice(0, i).some((_, j) => color(j) === color(i))
+      ? "6 3"
+      : undefined;
   const sessionLabel = (id: string) => {
     const s = picked.find((p) => p.id === id);
     return s
@@ -260,26 +284,28 @@ export default function Chart({
     );
   return (
     <>
-      <div className="legend">
-        {series.map((s, i) => (
-          <span key={`${s.sessionId}-${s.signal}`}>
-            <i
-              style={{
-                background: "transparent",
-                borderBottom: `2px ${i >= panel.signalKinds.length ? "dashed" : "solid"} ${color(i)}`,
-              }}
-            />
-            {!compact && `${sessionLabel(s.sessionId)} · `}
-            {signals[s.signal].name}{" "}
-            <b>
-              {panel.axis === "normalized"
-                ? "z (normalized)"
-                : signals[s.signal].unit}
-            </b>
-          </span>
-        ))}
-        {loading && <small>Loading…</small>}
-      </div>
+      {(apiPrefix !== "mvp/" || panel.signalKinds.length > 1) && (
+        <div className="legend">
+          {series.map((s, i) => (
+            <span key={`${s.sessionId}-${s.signal}`}>
+              <i
+                style={{
+                  background: "transparent",
+                  borderBottom: `2px ${lineDash(i) ? "dashed" : "solid"} ${color(i)}`,
+                }}
+              />
+              {!compact && `${sessionLabel(s.sessionId)} · `}
+              {signals[s.signal].name}{" "}
+              <b>
+                {panel.axis === "normalized"
+                  ? "z (normalized)"
+                  : signals[s.signal].unit}
+              </b>
+            </span>
+          ))}
+          {loading && <small>Loading…</small>}
+        </div>
+      )}
       {!loading &&
         !error &&
         series.length > 0 &&
@@ -401,39 +427,49 @@ export default function Chart({
               {signals[series[1].signal].unit}
             </text>
           )}
-          {[0, 1, 2, 3, 4].map((t) => (
+          {ticks.map((t) => (
             <g key={t}>
               <line
                 x1={left}
                 x2={width - right}
-                y1={top + (t * h) / 4}
-                y2={top + (t * h) / 4}
+                y1={top + (t * h) / tickSteps}
+                y2={top + (t * h) / tickSteps}
                 stroke="#e8e7e1"
               />
-              <text x={left - 10} y={top + (t * h) / 4 + 4} textAnchor="end">
+              <text
+                x={left - 10}
+                y={top + (t * h) / tickSteps + 4}
+                textAnchor="end"
+              >
                 {domains[0]
-                  ? (
-                      domains[0][1] -
-                      ((domains[0][1] - domains[0][0]) * t) / 4
-                    ).toFixed(
-                      panel.axis === "normalized"
-                        ? 1
-                        : series[0]?.signal === "phoneacc"
-                          ? 2
-                          : 0,
-                    )
+                  ? series[0]?.signal === "pace" && panel.axis !== "normalized"
+                    ? formatSignalValue(
+                        "pace",
+                        domains[0][1] -
+                          ((domains[0][1] - domains[0][0]) * t) / tickSteps,
+                      )
+                    : (
+                        domains[0][1] -
+                        ((domains[0][1] - domains[0][0]) * t) / tickSteps
+                      ).toFixed(tickDigits(0))
                   : "—"}
               </text>
               {panel.axis === "separate" && series.length > 1 && (
                 <text
                   x={width - right + 10}
-                  y={top + (t * h) / 4 + 4}
+                  y={top + (t * h) / tickSteps + 4}
                   style={{ fill: color(1) }}
                 >
-                  {(
-                    domains[1][1] -
-                    ((domains[1][1] - domains[1][0]) * t) / 4
-                  ).toFixed(series[1].signal === "phoneacc" ? 2 : 0)}
+                  {series[1].signal === "pace"
+                    ? formatSignalValue(
+                        "pace",
+                        domains[1][1] -
+                          ((domains[1][1] - domains[1][0]) * t) / tickSteps,
+                      )
+                    : (
+                        domains[1][1] -
+                        ((domains[1][1] - domains[1][0]) * t) / tickSteps
+                      ).toFixed(tickDigits(1))}
                 </text>
               )}
             </g>
@@ -568,7 +604,13 @@ export default function Chart({
                       ? (p.value - (s.summary.mean ?? 0)) / (s.summary.sd || 1)
                       : p.value;
                   prev = p.t;
-                  return `${br ? "M" : "L"}${x(p.t + o).toFixed(2)},${y(v, i).toFixed(2)}`;
+                  const px = x(p.t + o).toFixed(2),
+                    py = y(v, i).toFixed(2);
+                  return br
+                    ? `M${px},${py}`
+                    : ["hrzone", "steps"].includes(s.signal)
+                      ? `H${px}V${py}`
+                      : `L${px},${py}`;
                 })
                 .join(" ");
               return (
@@ -579,9 +621,7 @@ export default function Chart({
                   stroke={color(i)}
                   strokeWidth={panel.lineWidth}
                   opacity={panel.opacity}
-                  strokeDasharray={
-                    i >= panel.signalKinds.length ? "6 3" : undefined
-                  }
+                  strokeDasharray={lineDash(i)}
                   vectorEffect="non-scaling-stroke"
                 />
               );
@@ -609,7 +649,7 @@ export default function Chart({
       )}
       {cursor !== null && (
         <div
-          className={`cursor-values${compact ? " compact-readout" : ""}`}
+          className={`cursor-values${compact ? " compact-readout" : ""}${apiPrefix === "mvp/" && panel.signalKinds.length > 1 ? " mvp-overlay-readout" : ""}`}
           aria-live={compact ? "off" : "polite"}
         >
           <span>{timeLabel(cursor, layout.alignment === "absolute")}</span>
@@ -633,7 +673,7 @@ export default function Chart({
                 ? "No data"
                 : nearest.quality !== "measured"
                   ? "Uncertain data"
-                  : `${nearest.value.toFixed(s.signal === "phoneacc" ? 2 : 1)} ${signals[s.signal].unit}`;
+                  : `${formatSignalValue(s.signal, nearest.value)} ${signals[s.signal].unit}`;
             return (
               <span
                 key={`${s.sessionId}-${s.signal}`}
@@ -653,10 +693,16 @@ export default function Chart({
               </span>
             );
           })}
-          <small>Nearest displayed sample</small>
+          {apiPrefix !== "mvp/" && <small>Nearest displayed sample</small>}
         </div>
       )}
-      {compact && cursor === null && (
+      {compact && cursor === null && apiPrefix === "mvp/" && (
+        <div
+          className={`cursor-values compact-readout${panel.signalKinds.length > 1 ? " mvp-overlay-readout" : ""}`}
+          aria-hidden="true"
+        />
+      )}
+      {compact && cursor === null && apiPrefix !== "mvp/" && (
         <div className="cursor-values compact-readout">
           <span>Hover or tap to inspect a value.</span>
           <small>Drag horizontally to zoom.</small>
@@ -698,22 +744,24 @@ export default function Chart({
           )}
         </section>
       )}
-      <div className="chart-summary">
-        <details className="chart-data-details">
-          <summary>Data quality</summary>
-          <p>
-            {series
-              .reduce((a, s) => a + s.summary.count, 0)
-              .toLocaleString("en-GB")}{" "}
-            valid samples · {series.reduce((a, s) => a + s.gaps.length, 0)}{" "}
-            gaps. Statistics use the visible interval. Gaps are not
-            interpolated.
-            {panel.axis === "normalized"
-              ? " Normalization: z = (x − μ) / σ."
-              : ""}
-          </p>
-        </details>
-      </div>
+      {apiPrefix !== "mvp/" && (
+        <div className="chart-summary">
+          <details className="chart-data-details">
+            <summary>Data quality</summary>
+            <p>
+              {series
+                .reduce((a, s) => a + s.summary.count, 0)
+                .toLocaleString("en-GB")}{" "}
+              valid samples · {series.reduce((a, s) => a + s.gaps.length, 0)}{" "}
+              gaps. Statistics use the visible interval. Gaps are not
+              interpolated.
+              {panel.axis === "normalized"
+                ? " Normalization: z = (x − μ) / σ."
+                : ""}
+            </p>
+          </details>
+        </div>
+      )}
     </>
   );
 }

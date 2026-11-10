@@ -1,184 +1,95 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  DownloadSimpleIcon,
-  MagnifyingGlassIcon,
-  MagnifyingGlassPlusIcon,
-  ArrowCounterClockwiseIcon,
-  SignOutIcon,
   WaveformIcon,
   SlidersHorizontalIcon,
-  QuestionIcon,
-  XIcon,
+  DownloadSimpleIcon,
+  MagnifyingGlassIcon,
+  ArrowClockwiseIcon,
+  CaretRightIcon,
 } from "@phosphor-icons/react";
-import {
-  Layout,
-  Series,
-  Session,
-  SignalKind,
-  Template,
-  signals,
-} from "@/core/contract";
+import { Session, Series, SignalKind, signals } from "@/core/contract";
 import { displayText } from "@/core/presentation";
-import Chart, { api, Range, timeLabel } from "./Chart";
-import DashboardTour from "./DashboardTour";
+import { api as sharedApi, Range } from "./Chart";
 import ReviewCanvas from "./ReviewCanvas";
-import { ReviewCard, defaultCards, readCards } from "@/core/reviewLayout";
+import TrainingSummary from "./TrainingSummary";
+import { ReviewCard, readCards } from "@/core/reviewLayout";
 
-type User = { email: string; workspace: string };
+const api = <T,>(path: string, body?: unknown) =>
+  sharedApi<T>(`mvp/${path}`, body);
 const date = (n: number) =>
   new Date(n).toLocaleString("en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
   });
+const countLabel = (n: number, noun: string) =>
+  `${n} ${noun}${n === 1 ? "" : "s"}`;
 const duration = (n: number) =>
-  `${Math.floor(n / 60000)} min${n % 60000 >= 1000 ? ` ${Math.floor(n / 1000) % 60} sec` : ""}`;
-const signalHelp: Record<SignalKind, string> = {
-  hr: "Heartbeats per minute (bpm). Follow how heart rate changes during the session.",
-  rr: "Time between consecutive heartbeats, measured in milliseconds (ms).",
-  phoneacc: "Movement recorded by the phone’s accelerometer, measured in g.",
-  h10acc:
-    "Magnitude √(X² + Y² + Z²) of H10 acceleration, in mg, including gravity. Raw axes are available separately.",
-  h10accx: "Raw H10 acceleration along the X axis, in mg, including gravity.",
-  h10accy: "Raw H10 acceleration along the Y axis, in mg, including gravity.",
-  h10accz: "Raw H10 acceleration along the Z axis, in mg, including gravity.",
-  ecg: "Electrical activity of the heart, measured in microvolts (µV).",
-};
-function requestedSession() {
-  return new URLSearchParams(window.location.search).get("session");
+  `${Math.floor(n / 60000)}:${String(Math.floor(n / 1000) % 60).padStart(2, "0")}`;
+type Location = { group: string | null; recording: string | null };
+function readLocation(): Location {
+  const q = new URLSearchParams(window.location.search);
+  return { group: q.get("group"), recording: q.get("session") };
 }
-
 export default function SessionWorkspace() {
-  const [user, setUser] = useState<User | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [location, setLocation] = useState<Location>({
+    group: null,
+    recording: null,
+  });
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [participant, setParticipant] = useState("all");
-  const [email, setEmail] = useState("demo@apexvip.local");
-  const [password, setPassword] = useState("apex-demo-2026");
   const heading = useRef<HTMLHeadingElement>(null);
-  const searchInput = useRef<HTMLInputElement>(null);
-  const [tour, setTour] = useState(false);
-  const [welcome, setWelcome] = useState(false);
-  useEffect(() => {
-    if (!user) return;
-    try {
-      setWelcome(
-        localStorage.getItem(`apex-tour-v1:${user.workspace}`) !== "done",
-      );
-    } catch {
-      setWelcome(true);
-    }
-  }, [user?.workspace]);
-  function dismissWelcome() {
-    setWelcome(false);
-    try {
-      if (user) localStorage.setItem(`apex-tour-v1:${user.workspace}`, "done");
-    } catch {}
-  }
-  const navigation = useRef(false);
-  const lastSession = useRef<string | null>(null);
-  const listScroll = useRef(0);
-
-  useEffect(() => {
-    setSelected(requestedSession());
-    const pop = () => {
-      navigation.current = true;
-      setSelected(requestedSession());
-    };
-    window.addEventListener("popstate", pop);
-    api<User>("me")
-      .then(async (u) => {
-        setUser(u);
-        setSessions(await api<Session[]>("sessions"));
-      })
-      .catch((e) => {
-        if (e.message !== "Sign in to continue") setError(e.message);
-      })
-      .finally(() => setLoading(false));
-    return () => window.removeEventListener("popstate", pop);
-  }, []);
-
-  useEffect(() => {
-    if (!navigation.current) return;
-    const returnLink =
-      !selected && lastSession.current
-        ? document.getElementById(`session-${lastSession.current}`)
-        : null;
-    (returnLink ?? heading.current)?.focus({ preventScroll: true });
-    window.scrollTo({ top: selected ? 0 : listScroll.current });
-    navigation.current = false;
-  }, [selected]);
-
-  function navigate(id: string | null) {
-    if (id === selected) return;
-    if (id && !selected) {
-      lastSession.current = id;
-      listScroll.current = window.scrollY;
-    }
-    navigation.current = true;
-    window.history.pushState(
-      null,
-      "",
-      id ? `?session=${encodeURIComponent(id)}` : window.location.pathname,
-    );
-    setSelected(id);
-    setError("");
-  }
-
-  async function signIn(demo: boolean) {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await api<{ user: User }>("auth/login", { email, password });
-      setUser(r.user);
-      if (demo) await api("demo", {});
-      setSessions(await api<Session[]>("sessions"));
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Could not sign in. Please try again.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function refresh() {
-    setBusy(true);
-    setError("");
     try {
       setSessions(await api<Session[]>("sessions"));
+      setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load sessions.");
+      setError(e instanceof Error ? e.message : "Could not load sessions");
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   }
-
-  const session = sessions.find((s) => s.id === selected);
-  const filtered = sessions
-    .filter(
-      (s) =>
-        (participant === "all" || s.participantId === participant) &&
-        `${displayText(s.title)} ${s.participantLabel}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-    )
-    .sort((a, b) => b.startedAt - a.startedAt);
-  const participants = [
-    ...new Map(
-      sessions.map((s) => [s.participantId, s.participantLabel]),
-    ).entries(),
+  useEffect(() => {
+    setLocation(readLocation());
+    const pop = () => setLocation(readLocation());
+    window.addEventListener("popstate", pop);
+    void refresh();
+    const timer = setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, 10000);
+    return () => {
+      window.removeEventListener("popstate", pop);
+      clearInterval(timer);
+    };
+  }, []);
+  function navigate(group: string | null, recording: string | null = null) {
+    const q = new URLSearchParams();
+    if (group !== null) q.set("group", group);
+    if (recording) q.set("session", recording);
+    window.history.pushState(null, "", q.size ? `?${q}` : "/");
+    setLocation({ group, recording });
+    setQuery("");
+    window.scrollTo(0, 0);
+    requestAnimationFrame(() => heading.current?.focus());
+  }
+  const selected = sessions.find((s) => s.id === location.recording);
+  const group = location.group ?? (selected ? selected.title : null);
+  const groups = [
+    ...new Set(
+      [...sessions]
+        .sort((a, b) => b.startedAt - a.startedAt)
+        .map((s) => s.title),
+    ),
   ];
-
+  const recordings = sessions
+    .filter((s) => s.title === group)
+    .sort((a, b) => b.startedAt - a.startedAt);
   return (
-    <div className="simple-apex">
+    <div className="simple-apex mvp-apex">
       <a className="simple-skip" href="#workspace">
         Skip to content
       </a>
@@ -192,399 +103,277 @@ export default function SessionWorkspace() {
               navigate(null);
             }
           }}
-          aria-label="APEX sessions"
         >
           <WaveformIcon weight="bold" />
-          apex<span>Session review</span>
+          apex
         </a>
-        {user && (
-          <div className="simple-header-tools">
-            <button
-              className="simple-tour-button"
-              aria-haspopup="dialog"
-              onClick={() => setTour(true)}
-            >
-              <QuestionIcon />
-              Quick tour
-            </button>
-            <details className="simple-account">
-              <summary aria-label="Account menu">
-                {user.email.split("@")[0].slice(0, 2).toUpperCase()}
-              </summary>
-              <div>
-                <span>{user.email}</span>
-                <button
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    setError("");
-                    try {
-                      await api("auth/logout", {});
-                      setUser(null);
-                      setSessions([]);
-                      navigate(null);
-                    } catch (e) {
-                      setError(
-                        e instanceof Error ? e.message : "Could not sign out.",
-                      );
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  <SignOutIcon />
-                  Sign out
-                </button>
-              </div>
-            </details>
-          </div>
-        )}
       </header>
-      <main
-        id="workspace"
-        className={user ? "simple-main" : "simple-main simple-auth-main"}
-      >
+      <main className="simple-main" id="workspace">
         {error && (
           <div className="simple-error" role="alert">
             {error}
-            {user && (
-              <button onClick={refresh} disabled={busy}>
-                Try again
-              </button>
-            )}
+            <button onClick={refresh}>Try again</button>
           </div>
-        )}
-        {user && !loading && welcome && (
-          <aside className="apex-welcome">
-            <div>
-              <span className="welcome-mark">
-                <WaveformIcon />
-              </span>
-              <div>
-                <strong>A little guidance. A clearer picture.</strong>
-                <p>Get to know the signals and make this workspace your own.</p>
-              </div>
-            </div>
-            <button onClick={() => setTour(true)}>
-              Show me around
-              <ArrowRightIcon />
-            </button>
-            <button aria-label="Dismiss introduction" onClick={dismissWelcome}>
-              <XIcon />
-            </button>
-          </aside>
         )}
         {loading ? (
           <div className="simple-loading" role="status">
             Loading sessions…
             <div />
             <div />
-            <div />
           </div>
-        ) : !user ? (
-          <section className="simple-auth">
-            <span className="simple-kicker">APEX</span>
-            <h1>
-              Your sessions.
-              <br />A clearer picture.
-            </h1>
-            <p>Sign in to review your recordings.</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void signIn(false);
-              }}
-            >
-              <label>
-                Email
-                <input
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </label>
-              <button className="primary" disabled={busy}>
-                {busy ? "Opening…" : "Sign in"}
-                <ArrowRightIcon />
-              </button>
-            </form>
-            <button
-              className="simple-demo"
-              onClick={() => signIn(true)}
-              disabled={busy}
-            >
-              Open demo workspace
-              <ArrowRightIcon />
-            </button>
-            <small>Explore with synthetic recordings.</small>
-          </section>
-        ) : selected ? (
-          session ? (
+        ) : location.recording ? (
+          selected ? (
             <SessionReview
-              key={session.id}
-              session={session}
-              workspace={user.workspace}
-              onBack={() => navigate(null)}
+              key={selected.id}
+              session={selected}
+              onBack={() => navigate(selected.title)}
               headingRef={heading}
             />
           ) : (
             <section className="simple-empty">
-              <h1 ref={heading} tabIndex={-1}>
-                Session unavailable
-              </h1>
-              <p>This session could not be found in your workspace.</p>
-              <button onClick={() => navigate(null)}>
-                <ArrowLeftIcon />
-                Back to sessions
-              </button>
+              <h1>Recording unavailable</h1>
+              <button onClick={() => navigate(null)}>All sessions</button>
             </section>
           )
         ) : (
           <>
+            {group !== null && (
+              <button className="simple-back" onClick={() => navigate(null)}>
+                <ArrowLeftIcon />
+                All sessions
+              </button>
+            )}
             <div className="simple-page-title">
               <div>
-                <span className="simple-kicker">Your recordings</span>
+                <span className="simple-kicker">
+                  {group !== null ? "Session" : "Workspace"}
+                </span>
                 <h1 ref={heading} tabIndex={-1}>
-                  Sessions<span>{sessions.length}</span>
+                  {group !== null ? displayText(group) : "Sessions"}
                 </h1>
-                <p>Open a recording to review signals and self-reports.</p>
+                <p className="mvp-page-count">
+                  {group !== null
+                    ? countLabel(
+                        new Set(recordings.map((s) => s.participantId)).size,
+                        "participant",
+                      )
+                    : countLabel(groups.length, "session")}
+                </p>
               </div>
               <button
-                className="simple-refresh"
-                disabled={busy}
+                className="mvp-refresh"
                 onClick={refresh}
+                aria-label="Refresh"
+                title="Refresh sessions"
               >
-                {busy ? "Refreshing…" : "Refresh"}
+                <ArrowClockwiseIcon />
               </button>
             </div>
+            <div className="mvp-list-toolbar">
+              <label className="mvp-search">
+                <MagnifyingGlassIcon aria-hidden="true" />
+                <span className="sr-only">
+                  {group !== null ? "Search participants" : "Search sessions"}
+                </span>
+                <input
+                  type="search"
+                  placeholder={
+                    group !== null ? "Search participants…" : "Search sessions…"
+                  }
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              <span className="mvp-list-caption">
+                {group !== null ? "Participants" : "Recent sessions"}
+              </span>
+            </div>
             <section
-              className="simple-session-list"
-              aria-label="Recorded sessions"
+              className={
+                group !== null
+                  ? "mvp-session-grid mvp-participants"
+                  : "mvp-session-grid"
+              }
+              aria-label={group !== null ? "Participants" : "Sessions"}
             >
-              <div className="simple-filters">
-                <label className="simple-search">
-                  <MagnifyingGlassIcon />
-                  <span className="sr-only">Search sessions</span>
-                  <input
-                    type="search"
-                    ref={searchInput}
-                    placeholder="Search sessions or participants"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                </label>
-                {(query || participant !== "all") && (
-                  <button
-                    className="simple-clear-filters"
-                    onClick={() => {
-                      setQuery("");
-                      setParticipant("all");
-                      searchInput.current?.focus();
-                    }}
-                  >
-                    Clear filters
-                  </button>
-                )}
-                <label className="simple-participant">
-                  <span className="sr-only">Participant</span>
-                  <select
-                    aria-label="Participant"
-                    value={participant}
-                    onChange={(e) => setParticipant(e.target.value)}
-                  >
-                    <option value="all">All participants</option>
-                    {participants.map(([id, label]) => (
-                      <option key={id} value={id}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              {filtered.length ? (
-                <div className="simple-table-wrap">
-                  <table className="simple-table">
-                    <thead>
-                      <tr>
-                        <th>Session</th>
-                        <th>Participant</th>
-                        <th>Recorded</th>
-                        <th>Duration</th>
-                        <th>
-                          <span className="sr-only">Recording type</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((s) => (
-                        <tr key={s.id}>
-                          <td>
+              {group === null
+                ? groups
+                    .filter((title) =>
+                      displayText(title)
+                        .toLowerCase()
+                        .includes(query.toLowerCase()),
+                    )
+                    .map((title) => {
+                      const rows = sessions.filter((s) => s.title === title);
+                      const latest = Math.max(...rows.map((s) => s.startedAt));
+                      return (
+                        <a
+                          className="mvp-session-card"
+                          key={title}
+                          href={`?group=${encodeURIComponent(title)}`}
+                          onClick={(e) => {
+                            if (!e.metaKey && !e.ctrlKey) {
+                              e.preventDefault();
+                              navigate(title);
+                            }
+                          }}
+                        >
+                          <span
+                            className="mvp-session-symbol"
+                            aria-hidden="true"
+                          >
+                            <WaveformIcon weight="regular" />
+                          </span>
+                          <div className="mvp-session-name">
+                            <h2>{displayText(title)}</h2>
+                            <span>
+                              {new Set(rows.map((s) => s.participantId)).size}{" "}
+                              {new Set(rows.map((s) => s.participantId))
+                                .size === 1
+                                ? "participant"
+                                : "participants"}
+                              <span className="mvp-meta-dot">·</span>
+                              {rows.length}{" "}
+                              {rows.length === 1 ? "recording" : "recordings"}
+                            </span>
+                          </div>
+                          {rows.every((s) => s.demo) && (
+                            <small className="simple-demo-tag">Demo</small>
+                          )}
+                          <time
+                            className="mvp-card-date"
+                            dateTime={new Date(latest).toISOString()}
+                          >
+                            {date(latest)}
+                          </time>
+                          <span className="mvp-row-arrow" aria-hidden="true">
+                            <CaretRightIcon />
+                          </span>
+                        </a>
+                      );
+                    })
+                : [
+                    ...new Map(
+                      recordings.map((s) => [
+                        s.participantId,
+                        s.participantLabel,
+                      ]),
+                    ).entries(),
+                  ]
+                    .filter(([, name]) =>
+                      name.toLowerCase().includes(query.toLowerCase()),
+                    )
+                    .map(([id, name]) => (
+                      <article className="mvp-session-card" key={id}>
+                        <div className="mvp-participant-heading">
+                          <span className="mvp-avatar" aria-hidden="true">
+                            {name
+                              .split(/\s+/)
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join("")}
+                          </span>
+                          <div>
+                            <h2>{name}</h2>
+                            <span>
+                              {
+                                recordings.filter((s) => s.participantId === id)
+                                  .length
+                              }{" "}
+                              {recordings.filter((s) => s.participantId === id)
+                                .length === 1
+                                ? "recording"
+                                : "recordings"}
+                            </span>
+                          </div>
+                        </div>
+                        {recordings
+                          .filter((s) => s.participantId === id)
+                          .map((s) => (
                             <a
-                              className="simple-session-link"
-                              id={`session-${s.id}`}
-                              href={`?session=${encodeURIComponent(s.id)}`}
+                              className="mvp-recording-link"
+                              key={s.id}
+                              href={`?session=${s.id}`}
                               onClick={(e) => {
                                 if (!e.metaKey && !e.ctrlKey) {
                                   e.preventDefault();
-                                  navigate(s.id);
+                                  navigate(group, s.id);
                                 }
                               }}
                             >
-                              {displayText(s.title)}
+                              <span>
+                                {date(s.startedAt)} · {duration(s.durationMs)}
+                                {s.demo && (
+                                  <small className="simple-demo-tag">
+                                    Demo
+                                  </small>
+                                )}
+                              </span>
                               <ArrowRightIcon />
                             </a>
-                            <span className="simple-mobile-session-meta">
-                              {date(s.startedAt)}
-                              {s.demo && (
-                                <span className="simple-demo-tag">Demo</span>
-                              )}
-                            </span>
-                            {s.state === "recording" && (
-                              <small>Recording in progress</small>
-                            )}
-                          </td>
-                          <td>{s.participantLabel}</td>
-                          <td>{date(s.startedAt)}</td>
-                          <td>{duration(s.durationMs)}</td>
-                          <td>
-                            {s.demo && (
-                              <span className="simple-demo-tag">Demo</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="simple-empty">
-                  <WaveformIcon />
-                  <h2>
-                    {sessions.length
-                      ? "No matching sessions"
-                      : "Your first session starts on mobile"}
-                  </h2>
-                  <p>
-                    {sessions.length
-                      ? "Try another search or clear your filters."
-                      : "Record a session with APEX Mobile, then sync it here to review your signals."}
-                  </p>
-                </div>
-              )}
-              <div className="simple-list-footer">
-                <span role="status" aria-live="polite">
-                  {filtered.length}{" "}
-                  {filtered.length === 1 ? "session" : "sessions"}
-                  {participant !== "all" || query ? " found" : " recorded"}
-                </span>
-                <span>Newest first</span>
-              </div>
+                          ))}
+                      </article>
+                    ))}
             </section>
-            {sessions.some((s) => s.demo) && (
-              <p className="simple-demo-note">
-                <span />
-                Demo sessions contain synthetic data.
-              </p>
+            {!(group === null ? groups.length : recordings.length) && (
+              <section className="simple-empty">
+                <WaveformIcon />
+                <h2>No sessions yet</h2>
+                <p>Record a session in the mobile app to get started.</p>
+              </section>
             )}
+            {query &&
+              !(group === null
+                ? groups.some((t) =>
+                    displayText(t).toLowerCase().includes(query.toLowerCase()),
+                  )
+                : recordings.some((s) =>
+                    s.participantLabel
+                      .toLowerCase()
+                      .includes(query.toLowerCase()),
+                  )) && <p className="simple-empty">No results</p>}
           </>
         )}
       </main>
-      {tour && (
-        <DashboardTour
-          key={selected ?? "sessions"}
-          review={!!session}
-          onClose={() => {
-            setTour(false);
-            dismissWelcome();
-          }}
-        />
-      )}
-      <footer className="simple-footer">
-        <span>APEX</span>
-        <span>Record. Review. Understand.</span>
-      </footer>
     </div>
   );
 }
-
 function SessionReview({
   session: s,
-  workspace,
   onBack,
   headingRef,
 }: {
   session: Session;
-  workspace: string;
   onBack: () => void;
   headingRef: React.RefObject<HTMLHeadingElement | null>;
 }) {
-  const [inventory, setInventory] = useState<SignalKind[] | null>(null);
-  const [signal, setSignal] = useState<SignalKind>("hr");
+  const [available, setAvailable] = useState<SignalKind[] | null>(null);
+  const [cards, setCards] = useState<ReviewCard[]>([]);
   const [summaries, setSummaries] = useState<Partial<
     Record<SignalKind, Series>
   > | null>(null);
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [retry, setRetry] = useState(0);
   const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState("");
   const [range, setRange] = useState<Range>([0, s.durationMs]);
   const [cursor, setCursor] = useState<number | null>(null);
   const [selection, setSelection] = useState<Range | null>(null);
-  const [customCards, setCustomCards] = useState<ReviewCard[] | null>(null);
-  const [customizing, setCustomizing] = useState(false);
-  const [layoutNotice, setLayoutNotice] = useState("");
-  const previousCards = useRef<ReviewCard[] | null>(null);
-  const wasCustomizing = useRef(false);
-  useEffect(() => {
-    if (wasCustomizing.current && !customizing)
-      document.querySelector<HTMLElement>("[data-tour=customize]")?.focus();
-    wasCustomizing.current = customizing;
-  }, [customizing]);
-  const preferenceKey = `apex-review-v1:${workspace}:${s.id}`;
-
+  const previous = useRef<ReviewCard[]>([]);
+  const key = `apex-mvp-layout-v1:${s.id}`;
+  const defaults = (kinds: SignalKind[]): ReviewCard[] =>
+    kinds.map((k) => ({ id: `chart-${k}`, kind: "signal", signals: [k] }));
   useEffect(() => {
     let active = true;
     setError("");
-    setInventory(null);
-    Promise.all([
-      api<{ signal: SignalKind; count: number }[]>(`sessions/${s.id}/signals`),
-      api<Template[]>("templates"),
-    ])
-      .then(async ([rows, forms]) => {
-        const available = Object.keys(signals).filter((k) =>
+    api<{ signal: SignalKind; count: number }[]>(`sessions/${s.id}/signals`)
+      .then(async (rows) => {
+        const kinds = (Object.keys(signals) as SignalKind[]).filter((k) =>
           rows.some((r) => r.signal === k && r.count > 0),
-        ) as SignalKind[];
-        if (!active) return;
-        setInventory(available);
-        try {
-          const stored = localStorage.getItem(preferenceKey);
-          if (stored)
-            setCustomCards(
-              readCards(
-                stored,
-                available,
-                s.events.some((e) => e.type === "self-report"),
-                s.events.some((e) => e.type !== "self-report"),
-              ),
-            );
-        } catch {}
-        setTemplates(forms);
-        setSignal(available[0] ?? "hr");
-        const series = await Promise.all(
-          available.map(
+        );
+        const data = await Promise.all(
+          kinds.map(
             async (k) =>
               [
                 k,
@@ -592,7 +381,15 @@ function SessionReview({
               ] as const,
           ),
         );
-        if (active) setSummaries(Object.fromEntries(series));
+        if (!active) return;
+        let saved: ReviewCard[] | null = null;
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) saved = readCards(raw, kinds, false, false);
+        } catch {}
+        setCards(saved ?? defaults(kinds));
+        setAvailable(kinds);
+        setSummaries(Object.fromEntries(data));
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -600,11 +397,18 @@ function SessionReview({
     return () => {
       active = false;
     };
-  }, [s.id, retry, preferenceKey]);
-
+  }, [s.id, key, retry]);
+  function persist(next: ReviewCard[]) {
+    try {
+      localStorage.setItem(key, JSON.stringify({ version: 1, cards: next }));
+      setNotice("");
+    } catch {
+      setNotice("Layout could not be saved in this browser.");
+    }
+  }
   async function exportCSV() {
     setExporting(true);
-    setExportError("");
+    setError("");
     try {
       let after = -1;
       const lines = [
@@ -636,401 +440,168 @@ function SessionReview({
       a.href = url;
       a.download = `${s.id}.csv`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      setExportError(
-        e instanceof Error ? e.message : "Export failed. Please try again.",
-      );
+      setError(e instanceof Error ? e.message : "Export failed");
     } finally {
       setExporting(false);
     }
   }
-
-  const layout: Layout = {
-    version: 1,
-    id: `review-${s.id}`,
-    title: s.title,
-    alignment: "elapsed",
-    anchorLabel: "",
-    panels: [
-      {
-        id: `signal-${s.id}`,
-        title: signals[signal].name,
-        sessionIds: [s.id],
-        signalKinds: [signal],
-        axis: "shared",
-        color: signals[signal].color,
-        lineWidth: 2,
-        opacity: 1,
-        visible: true,
-        width: 2,
-        height: 390,
-      },
-    ],
-  };
-  const summary = summaries?.[signal]?.summary;
-  const reports = s.events.filter((e) => e.type === "self-report");
-  const events = s.events
-    .filter((e) => e.type !== "self-report")
-    .sort((a, b) => a.t - b.t);
-  const reportSection =
-    reports.length > 0 ? (
-      <section className="simple-context">
-        <h2>Self-reports</h2>
-        <p>The participant’s own ratings.</p>
-        <dl>
-          {reports.map((e) => {
-            const form = templates.find(
-              (t) => t.id === e.formId && t.version === e.formVersion,
-            );
-            const q = form?.questions.find((q) => q.id === e.questionId);
-            return (
-              <div key={e.id}>
-                <dt>
-                  {displayText(e.label)}
-                  <small>
-                    {q
-                      ? q.phase === "pre"
-                        ? "Before session"
-                        : "After session"
-                      : timeLabel(e.t)}
-                  </small>
-                </dt>
-                <dd>
-                  {e.value ?? "—"}
-                  {q && (
-                    <small>
-                      {" "}
-                      / {q.max}{" "}
-                      <span className="sr-only">
-                        (scale {q.min} to {q.max})
-                      </span>
-                    </small>
-                  )}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      </section>
-    ) : null;
-  const timelineSection =
-    events.length > 0 ? (
-      <section className="simple-context">
-        <h2>Session timeline</h2>
-        <p>Events and notes from the recording.</p>
-        <ol>
-          {events.map((e) => (
-            <li key={e.id}>
-              <time>{timeLabel(e.t)}</time>
-              <span>{displayText(e.label)}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
-    ) : null;
-  const fullRange = range[0] <= 0 && range[1] >= s.durationMs;
-  function showRange(next: Range) {
-    const width = Math.min(s.durationMs, Math.max(1000, next[1] - next[0]));
-    const from = Math.max(0, Math.min(s.durationMs - width, next[0]));
-    setRange([from, from + width]);
-    setCursor(null);
-    setSelection(null);
-  }
-
   return (
     <>
-      <button className="simple-back" onClick={onBack}>
+      <button
+        className="simple-back"
+        onClick={onBack}
+        aria-label={`${displayText(s.title)} · Participants`}
+      >
         <ArrowLeftIcon />
-        All sessions
+        <span>{displayText(s.title)}</span>
+        <CaretRightIcon />
+        <span>Participants</span>
       </button>
       <div className="simple-page-title simple-review-title">
         <div>
-          <div className="simple-kicker">
-            {s.participantLabel}
-            {s.demo && <span className="simple-demo-tag">Demo</span>}
-            {s.state === "recording" && <span>Recording in progress</span>}
-          </div>
-          <h1 ref={headingRef} tabIndex={-1}>
+          <span className="simple-kicker">
             {displayText(s.title)}
+            {s.demo && <span className="simple-demo-tag">Demo</span>}
+          </span>
+          <h1 ref={headingRef} tabIndex={-1}>
+            {s.participantLabel}
           </h1>
           <p>
             {date(s.startedAt)}
-            <span className="simple-dot">·</span>
-            {duration(s.durationMs)}
+            {s.state === "recording" && (
+              <span className="mvp-recording-status">Recording</span>
+            )}
           </p>
         </div>
         <div className="simple-review-tools">
           <button
-            data-tour="customize"
-            aria-pressed={customizing}
-            disabled={inventory === null || !!error}
+            className="mvp-customize-button"
+            aria-pressed={editing}
+            disabled={!available?.length}
             onClick={() => {
-              if (customizing) {
-                document.querySelector(".canvas-customizer")?.scrollIntoView({
-                  behavior: matchMedia("(prefers-reduced-motion: reduce)")
-                    .matches
-                    ? "auto"
-                    : "smooth",
-                  block: "center",
-                });
-                return;
-              }
-              previousCards.current = customCards
-                ? structuredClone(customCards)
-                : null;
-              setCustomCards(
-                customCards ??
-                  defaultCards(
-                    signal,
-                    !!reportSection,
-                    !!timelineSection,
-                  ).filter(
-                    (c) =>
-                      c.kind !== "signal" || inventory?.includes(c.signals[0]),
-                  ),
-              );
-              setCustomizing(true);
-              setLayoutNotice("");
+              if (editing) return;
+              previous.current = structuredClone(cards);
+              setEditing(true);
             }}
           >
             <SlidersHorizontalIcon />
-            Customize
+            Choose graphs
           </button>
-          <button onClick={exportCSV} disabled={exporting}>
+          <button disabled={exporting} onClick={exportCSV}>
             <DownloadSimpleIcon />
             {exporting ? "Exporting…" : "Export CSV"}
           </button>
         </div>
       </div>
-      {exportError && (
-        <p role="alert" className="simple-error">
-          {exportError}
-        </p>
-      )}
+      <div className="mvp-recording-strip">
+        <span>
+          <span className="mvp-stat-label">Duration</span>
+          <strong>{duration(s.durationMs)}</strong>
+        </span>
+        <span>
+          <span className="mvp-stat-label">Signals</span>
+          <strong>{available?.length ?? "—"}</strong>
+        </span>
+        <span>
+          <span className="mvp-stat-label">Device</span>
+          <strong>
+            {s.source.startsWith("polar-h10:") ||
+            s.source === "mobile-synthetic-v2"
+              ? "Polar H10"
+              : s.demo
+                ? "Demo recording"
+                : "Recording"}
+          </strong>
+        </span>
+      </div>
+      <TrainingSummary session={s} />
       {error ? (
         <div className="simple-error" role="alert">
           {error}
           <button onClick={() => setRetry((n) => n + 1)}>Try again</button>
         </div>
-      ) : customCards && inventory !== null ? (
+      ) : available === null ? (
+        <div className="simple-loading" role="status">
+          Loading signals…
+          <div />
+          <div />
+        </div>
+      ) : !available.length ? (
+        <section className="simple-empty">
+          <h2>No signals yet</h2>
+          <p>Send this recording from mobile, then refresh.</p>
+        </section>
+      ) : (
         <ReviewCanvas
           session={s}
-          available={inventory}
-          cards={customCards}
+          available={available}
+          cards={cards}
           onChange={(next) => {
-            setCustomCards(next);
-            setLayoutNotice("");
+            setCards(next);
+            if (!editing) persist(next);
           }}
-          editing={customizing}
+          editing={editing}
           summaries={summaries}
-          reports={reportSection}
-          timeline={timelineSection}
+          reports={null}
+          timeline={null}
           range={range}
           cursor={cursor}
           selection={selection}
-          onRange={showRange}
+          onRange={(next) => {
+            const width = Math.min(
+              s.durationMs,
+              Math.max(1, next[1] - next[0]),
+            );
+            const from = Math.max(0, Math.min(s.durationMs - width, next[0]));
+            setRange([from, from + width]);
+            setCursor(null);
+            setSelection(null);
+          }}
           onCursor={setCursor}
           onSelect={setSelection}
-          notice={layoutNotice}
+          notice={notice}
           onSave={() => {
-            if (!customCards.length) return;
-            try {
-              localStorage.setItem(
-                preferenceKey,
-                JSON.stringify({ version: 1, cards: customCards }),
-              );
-              setCustomizing(false);
-              setLayoutNotice("Layout saved for this session on this browser.");
-            } catch {
-              setLayoutNotice(
-                "Your browser could not save the layout. Keep editing or cancel to return to your previous view.",
-              );
-            }
+            persist(cards);
+            setEditing(false);
           }}
           onCancel={() => {
-            setCustomCards(previousCards.current);
-            setCustomizing(false);
-            setLayoutNotice("");
+            setCards(previous.current);
+            setEditing(false);
           }}
           onReset={() => {
-            try {
-              localStorage.removeItem(preferenceKey);
-              setCustomCards(null);
-              setCustomizing(false);
-              setLayoutNotice("Default view restored.");
-            } catch {
-              setLayoutNotice(
-                "Your browser could not reset the saved layout. Try again or cancel.",
-              );
-            }
+            const next = defaults(available);
+            setCards(next);
+            persist(next);
+            setEditing(false);
           }}
         />
-      ) : inventory === null ? (
-        <div className="simple-loading" role="status">
-          Loading recording…
-          <div />
-          <div />
-        </div>
-      ) : !inventory.length ? (
-        <section className="simple-empty">
-          <h2>No signals yet</h2>
-          <p>
-            The recording has no samples. Sync the session from APEX Mobile and
-            refresh.
-          </p>
-        </section>
-      ) : (
-        <section className="simple-signal-panel" aria-label="Session signals">
-          <div
-            className="simple-signal-tabs"
-            role="tablist"
-            aria-label="Recorded signals"
-          >
-            {inventory.map((k, i) => (
-              <button
-                key={k}
-                id={`tab-${k}`}
-                role="tab"
-                aria-selected={signal === k}
-                aria-controls="signal-chart"
-                tabIndex={signal === k ? 0 : -1}
-                onClick={() => {
-                  setSignal(k);
-                  setCursor(null);
-                }}
-                onKeyDown={(e) => {
-                  const target =
-                    e.key === "ArrowRight"
-                      ? (i + 1) % inventory.length
-                      : e.key === "ArrowLeft"
-                        ? (i - 1 + inventory.length) % inventory.length
-                        : e.key === "Home"
-                          ? 0
-                          : e.key === "End"
-                            ? inventory.length - 1
-                            : null;
-                  if (target === null) return;
-                  e.preventDefault();
-                  setSignal(inventory[target]);
-                  setCursor(null);
-                  document.getElementById(`tab-${inventory[target]}`)?.focus();
-                }}
-              >
-                {k === "phoneacc" ? "Movement" : signals[k].name}
-              </button>
-            ))}
-          </div>
-          <div
-            id="signal-chart"
-            role="tabpanel"
-            aria-labelledby={`tab-${signal}`}
-          >
-            <div className="simple-signal-heading">
-              <div>
-                <h2>{signals[signal].name}</h2>
-                <p>{signalHelp[signal]}</p>
-              </div>
-              <div className="simple-signal-stats">
-                <span>
-                  Session average
-                  <strong>
-                    {summary?.mean?.toFixed(signal === "phoneacc" ? 2 : 0) ??
-                      "—"}
-                    <small>{signals[signal].unit}</small>
-                  </strong>
-                </span>
-                <span>
-                  Session peak
-                  <strong>
-                    {summary?.max?.toFixed(signal === "phoneacc" ? 2 : 0) ??
-                      "—"}
-                    <small>{signals[signal].unit}</small>
-                  </strong>
-                </span>
-              </div>
-            </div>
-            <div className="simple-chart-controls" aria-label="Chart controls">
-              <span className="simple-range-label">
-                {fullRange ? "Full session" : "Zoomed in"}
-                <strong>
-                  {timeLabel(range[0])}–{timeLabel(range[1])}
-                </strong>
-              </span>
-              <div>
-                <button
-                  disabled={range[1] - range[0] <= Math.min(1000, s.durationMs)}
-                  onClick={() => {
-                    const span = (range[1] - range[0]) / 2;
-                    const mid = (range[0] + range[1]) / 2;
-                    showRange([mid - span / 2, mid + span / 2]);
-                  }}
-                >
-                  <MagnifyingGlassPlusIcon />
-                  Zoom in
-                </button>
-                {!fullRange && (
-                  <button onClick={() => showRange([0, s.durationMs])}>
-                    <ArrowCounterClockwiseIcon />
-                    Full session
-                  </button>
-                )}
-              </div>
-            </div>
-            <Chart
-              panel={layout.panels[0]}
-              sessions={[s]}
-              layout={layout}
-              range={range}
-              cursor={cursor}
-              onCursor={setCursor}
-              onRange={showRange}
-              selection={selection}
-              onSelect={setSelection}
-              dragMode="zoom"
-              compact
-            />
-            <div className="simple-chart-foot">
-              <span>
-                Shaded areas indicate missing data. All times are relative to
-                session start.
-              </span>
-            </div>
-          </div>
-        </section>
-      )}
-      {!customCards && layoutNotice && (
-        <p className="canvas-announcement" role="status">
-          {layoutNotice}
-        </p>
-      )}
-      {!customCards && (reports.length > 0 || events.length > 0) && (
-        <div className="simple-context-grid">
-          {reportSection}
-          {timelineSection}
-        </div>
       )}
       <details className="simple-recording-info">
         <summary>Recording details</summary>
         <dl>
           <div>
-            <dt>Participant</dt>
+            <dt>Name</dt>
             <dd>{s.participantLabel}</dd>
+          </div>
+          <div>
+            <dt>Session</dt>
+            <dd>{displayText(s.title)}</dd>
+          </div>
+          <div>
+            <dt>Duration</dt>
+            <dd>{duration(s.durationMs)}</dd>
           </div>
           <div>
             <dt>Source</dt>
             <dd>{s.source}</dd>
           </div>
           <div>
-            <dt>Session ID</dt>
-            <dd>{s.id}</dd>
-          </div>
-          <div>
             <dt>Status</dt>
-            <dd>{s.state === "ended" ? "Ended" : "Recording"}</dd>
+            <dd>{s.state === "ended" ? "Completed" : "Recording"}</dd>
           </div>
         </dl>
-        {s.demo && <p>Synthetic demo recording.</p>}
       </details>
     </>
   );

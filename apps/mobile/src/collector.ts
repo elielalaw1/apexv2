@@ -1,3 +1,4 @@
+import { PhoneSamples } from "../../../src/core/phoneSamples";
 import Polar from "../modules/apex-polar";
 import { randomUUID } from "expo-crypto";
 import {
@@ -7,7 +8,7 @@ import {
   Template,
 } from "../../../src/core/contract";
 import { PolarSamples } from "../../../src/core/polarSamples";
-import { stopStreams, startPreview } from "./livePolar";
+import { stopStreams, startPreview, recordLive, resetPhoneLive } from "./livePolar";
 import { SampleWriter, saveSession, seal, saveLocalTemplate } from "./storage";
 let session: Session | null = null,
   writer: SampleWriter | null = null,
@@ -18,7 +19,8 @@ let session: Session | null = null,
   lastContact = true,
   closing = false,
   activeTemplate: Template = defaultTemplate,
-  fatalError: string | null = null;
+  fatalError: string | null = null,
+  phoneStatus = "Phone sensors off";
 export function snapshot() {
   return {
     session,
@@ -26,6 +28,7 @@ export function snapshot() {
     buffered: writer?.buffered ?? 0,
     error: fatalError ?? writer?.error,
     contact: lastContact,
+    phoneStatus,
   };
 }
 export async function start(
@@ -33,6 +36,12 @@ export async function start(
   ws: string,
   answers: Record<string, number>,
   template = defaultTemplate,
+  details?: {
+    name: string;
+    title: string;
+    maxHeartRate?: number;
+    phoneSensors?: boolean;
+  },
 ) {
   if (session) throw Error("Finish or recover the current session first");
   if (!Polar)
@@ -58,8 +67,8 @@ export async function start(
   const created: Session = {
     id: randomUUID(),
     participantId: participant,
-    participantLabel: participant,
-    title: `${template.title} · ${participant}`,
+    participantLabel: details?.name ?? participant,
+    title: details?.title ?? `${template.title} · ${participant}`,
     typeId: template.id,
     typeVersion: template.version,
     startedAt: now,
@@ -68,6 +77,10 @@ export async function start(
     source: `polar-h10:${state.id}`,
     timePolicy: "sensor-relative-v1",
     state: "recording",
+    training: {
+      phoneSensors: details?.phoneSensors ?? false,
+      ...(details?.maxHeartRate ? { maxHeartRate: details.maxHeartRate } : {}),
+    },
     events: template.questions
       .filter((q) => q.phase === "pre")
       .map((q) => ({
@@ -85,6 +98,11 @@ export async function start(
   session = created;
   writer = new SampleWriter(created.id);
   let wasConnected = true;
+  resetPhoneLive();
+  const phone = new PhoneSamples(now);
+  phoneStatus = details?.phoneSensors
+    ? "Starting phone sensors…"
+    : "Phone sensors off";
   function add(read: () => Sample[]) {
     if (!session || !writer || closing) return;
     try {
@@ -99,6 +117,16 @@ export async function start(
     }
   }
   subs = [
+    Polar.addListener("phoneSampleReceived", (p) =>
+      add(() => {
+        const samples = phone.sample(p);
+        recordLive(samples);
+        return samples;
+      }),
+    ),
+    Polar.addListener("phoneSensorStatus", (p) => {
+      phoneStatus = p.message;
+    }),
     Polar.addListener("heartRateSampleReceived", (s) => {
       lastContact = !s.contactSupported || s.contactDetected;
       add(() => converter!.hr(s.bpm, s.timestamp, lastContact));
@@ -145,6 +173,13 @@ export async function start(
   ];
   try {
     await startPreview();
+    if (details?.phoneSensors) {
+      try {
+        await Polar.startPhoneSensors();
+      } catch {
+        phoneStatus = "Phone sensors unavailable in this build.";
+      }
+    }
   } catch (e) {
     await finish({});
     throw e;
@@ -166,6 +201,7 @@ export async function event(label: string) {
 export async function finish(answers: Record<string, number>) {
   if (!session || !writer) return;
   closing = true;
+  await Polar?.stopPhoneSensors().catch(() => {});
   await stopStreams();
   subs.forEach((s) => s.remove());
   subs = [];

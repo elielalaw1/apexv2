@@ -8,14 +8,18 @@ const cards: ReviewCard[] = [
   { id: "motion", kind: "signal", signals: ["phoneacc"] },
   { id: "events", kind: "timeline" },
 ];
-test("Combining graphs keeps every selected signal and caps the overlay at two", () => {
+test("Combining graphs keeps every selected signal and supports multi-signal overlays", () => {
   const combined = combineCards(cards, "rr", "hr");
   assert.equal(combined.length, 3);
   assert.deepEqual(
     combined.flatMap((c) => (c.kind === "signal" ? c.signals : [])),
     ["hr", "rr", "phoneacc"],
   );
-  assert.equal(combineCards(combined, "motion", "hr"), combined);
+  assert.deepEqual(combineCards(combined, "motion", "hr")[0], {
+    id: "hr",
+    kind: "signal",
+    signals: ["hr", "rr", "phoneacc"],
+  });
   assert.equal(combineCards(cards, "hr", "events"), cards);
 });
 test("Saved preferences reload intact and cannot introduce unavailable or duplicate signals", () => {

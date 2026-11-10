@@ -1,3 +1,5 @@
+import { trainingSeries, trainingMetrics, derivedKinds } from "@/core/training";
+import { envelope, gaps, summarize } from "@/core/analysis";
 import {
   BatchSchema,
   signals,
@@ -92,7 +94,9 @@ export function ingest(workspace: string, input: unknown) {
         previous.source !== batch.session.source ||
         previous.typeId !== batch.session.typeId ||
         previous.typeVersion !== batch.session.typeVersion ||
-        previous.timePolicy !== batch.session.timePolicy
+        previous.timePolicy !== batch.session.timePolicy ||
+        JSON.stringify(previous.training) !==
+          JSON.stringify(batch.session.training)
       )
         throw new ApiError(409, "Session origin cannot be changed");
       if (previous.state === "ended" && batch.session.state === "recording")
@@ -190,7 +194,54 @@ export function readSeries(
   to: number,
   budget = 900,
 ): Series {
-  requireSession(workspace, id);
+  const session = requireSession(workspace, id);
+  if (derivedKinds.includes(signal)) {
+    const all = trainingSeries(
+      session,
+      signal,
+      rawSignal(id, "hr"),
+      rawSignal(id, "rr"),
+    );
+    const points = all.filter((p) => p.t >= from && p.t <= to);
+    const summary = summarize(points);
+    const valid = points.filter((p) => p.quality === "measured");
+    const mean = summary.mean ?? 0;
+    const sd = valid.length
+      ? Math.sqrt(
+          valid.reduce((sum, p) => sum + (p.value - mean) ** 2, 0) /
+            valid.length,
+        )
+      : null;
+    const boundaries = all
+      .flatMap((p, i) =>
+        i > 0 &&
+        (p.t - all[i - 1].t > signals[signal].gapMs ||
+          p.quality !== "measured" ||
+          all[i - 1].quality !== "measured")
+          ? [
+              {
+                from: all[i - 1].t,
+                to: p.t,
+                reason:
+                  p.quality !== "measured" || all[i - 1].quality !== "measured"
+                    ? ("quality" as const)
+                    : ("gap" as const),
+              },
+            ]
+          : [],
+      )
+      .filter((g) => g.to >= from && g.from <= to);
+    const rendered = envelope(points, budget);
+    return {
+      sessionId: id,
+      signal,
+      points: rendered,
+      rawCount: points.length,
+      renderCount: rendered.length,
+      summary: { ...summary, sd },
+      gaps: boundaries,
+    };
+  }
   const db = getDb();
   const params = [id, signal, from, to] as const;
   const stat = db
@@ -309,4 +360,31 @@ export function saveTemplate(workspace: string, input: unknown) {
     .prepare("INSERT OR IGNORE INTO templates VALUES(?,?,?,?)")
     .run(workspace, t.id, t.version, JSON.stringify(t));
   return t;
+}
+
+function rawSignal(id: string, signal: SignalKind): Sample[] {
+  return getDb()
+    .prepare(
+      'SELECT signal,idx AS "index",t,received AS receivedAt,sensor AS sensorTime,value,quality FROM samples WHERE session_id=? AND signal=? ORDER BY t,idx',
+    )
+    .all(id, signal) as Sample[];
+}
+export function signalInventory(workspace: string, id: string) {
+  const session = requireSession(workspace, id);
+  const rows = getDb()
+    .prepare(
+      "SELECT signal, count(*) AS count FROM samples WHERE session_id=? GROUP BY signal",
+    )
+    .all(id) as { signal: SignalKind; count: number }[];
+  const hr = rawSignal(id, "hr"),
+    rr = rawSignal(id, "rr");
+  for (const kind of derivedKinds) {
+    const points = trainingSeries(session, kind, hr, rr);
+    if (points.some((p) => p.quality === "measured"))
+      rows.push({ signal: kind, count: points.length });
+  }
+  return rows;
+}
+export function metrics(workspace: string, id: string) {
+  return trainingMetrics(requireSession(workspace, id), rawSignal(id, "hr"));
 }
